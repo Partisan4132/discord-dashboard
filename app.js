@@ -4,13 +4,23 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, { credentials: "include", headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  if (response.status === 401) { state.user = null; updateConnection(false); throw new Error("Log in to use the dashboard."); }
+  const response = await fetch(`${API}${path}`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options
+  });
+  if (response.status === 401) {
+    state.user = null;
+    updateConnection(false);
+    throw new Error("Log in with Discord first.");
+  }
   if (!response.ok) throw new Error(await response.text() || `Request failed: ${response.status}`);
   return response.status === 204 ? null : response.json();
 }
 
-function escapeHtml(value) { return String(value ?? "").replace(/[&<>\"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" })[character]); }
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" })[character]);
+}
 function formatDate(value) { return value ? new Date(value).toLocaleString() : "—"; }
 function message(element, text, type = "") { element.textContent = text; element.className = `form-message ${type}`; }
 function updateConnection(connected, user = null) { $("#connectionText").textContent = connected ? "Connected" : "Not connected"; $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b"; $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord"; if (user) $("#serverName").textContent = user.guildName || "Connected server"; }
@@ -28,8 +38,50 @@ function renderActivity(items = []) {
   $("#activityFeed").innerHTML = items.length ? items.slice(0, 12).map(item => `<div class="activity-row"><div><strong>${escapeHtml(item.action || item.type || "Activity")}</strong><small>${escapeHtml(item.target || item.username || "Server event")}</small></div><small>${formatDate(item.at || item.createdAt)}</small></div>`).join("") : '<div class="empty-state">No activity recorded yet.</div>';
 }
 
-function renderTable(rows = []) {
-  $("#applicationsTable").innerHTML = rows.length ? `<table class="data-table"><thead><tr><th>Applicant</th><th>Type</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.username || row.userId)}</td><td>${escapeHtml(row.typeName || row.typeId)}</td><td><span class="status ${escapeHtml(row.status)}">${escapeHtml(row.status)}</span></td><td>${formatDate(row.createdAt)}</td><td>${row.status === "pending" ? `<div class="review-actions"><button class="text-button" data-id="${escapeHtml(row.id)}" data-decision="approved">Approve</button><button class="text-button" data-id="${escapeHtml(row.id)}" data-decision="denied">Deny</button><button class="text-button" data-id="${escapeHtml(row.id)}" data-decision="changes_requested">Changes</button></div>` : "Reviewed"}</td></tr>`).join("")}</tbody></table>` : '<div class="empty-state">No applications found.</div>';
+function formatDuration(seconds) {
+  const total = Number(seconds || 0);
+  if (!Number.isFinite(total) || total <= 0) return "—";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = Math.floor(total % 60);
+  return [hours ? `${hours}h` : "", minutes ? `${minutes}m` : "", secs ? `${secs}s` : ""].filter(Boolean).join(" ") || "0s";
+}
+
+function formatRelativeDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+  if (days === 0) return "today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? "" : "s"} ago`;
+}
+
+function applicationStats(row) {
+  const stats = row.submissionStats || row.stats || {};
+  const duration = row.durationSeconds ?? row.duration ?? stats.durationSeconds ?? stats.duration;
+  const joinedAt = row.joinedAt ?? row.guildJoinedAt ?? stats.joinedAt ?? stats.guildJoinedAt;
+  const submittedAt = row.submittedAt ?? row.createdAt;
+  return { duration: formatDuration(duration), joined: formatRelativeDate(joinedAt), submitted: formatDate(submittedAt) };
+}
+
+function renderApplications(rows = []) {
+  const pending = rows.filter(row => row.status === "pending");
+  $("#applicationsList").innerHTML = pending.length ? pending.map(row => {
+    const stats = applicationStats(row);
+    const answers = Array.isArray(row.answers) ? row.answers : [];
+    const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
+    const displayUser = row.userMention || row.mention || `<@${escapeHtml(row.userId || "")}>`;
+    return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
+      <div class="application-card-head"><div><p class="eyebrow">${escapeHtml(row.typeName || row.typeId || "Application")} application submitted</p><h3>${escapeHtml(applicant)}'s “${escapeHtml(row.typeName || row.typeId || "Application")}” Application Submitted</h3><p class="application-user">User: ${escapeHtml(displayUser)}</p></div><span class="status">Pending</span></div>
+      <div class="answer-list">${answers.length ? answers.map((item, index) => `<div class="answer-item"><div class="answer-question">${index + 1}. ${escapeHtml(item.question || item.label || `Question ${index + 1}`)}</div><div class="answer-value">${escapeHtml(item.answer || "(no answer)").replace(/\n/g, "  
+")}</div></div>`).join("") : '<div class="empty-state">No answers were recorded.</div>'}</div>
+      <div class="submission-stats"><p class="eyebrow">Submission stats</p><div class="stats-grid"><div><span>User ID</span><strong>${escapeHtml(row.userId || "—")}</strong></div><div><span>Username</span><strong>${escapeHtml(applicant)}</strong></div><div><span>Duration</span><strong>${escapeHtml(stats.duration)}</strong></div><div><span>Joined guild</span><strong>${escapeHtml(stats.joined)}</strong></div><div><span>Submitted</span><strong>${escapeHtml(stats.submitted)}</strong></div></div></div>
+      <div class="application-actions"><button class="primary application-action" data-id="${escapeHtml(row.id)}" data-decision="approved">Accept application</button><button class="danger application-action" data-id="${escapeHtml(row.id)}" data-decision="denied">Deny application</button></div>
+    </article>`;
+  }).join("") : '<div class="empty-state">There are no pending applications.</div>';
 }
 
 function options(items, selected, emptyLabel) { return `<option value="">${emptyLabel}</option>` + items.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join(""); }
@@ -74,7 +126,7 @@ function collectSettings() {
 
 async function loadSection(section) {
   if (section === "overview") { const [status, activity, applications] = await Promise.all([api("/api/status"), api("/api/activity"), api("/api/applications?status=pending")]); $("#botStatus").textContent = status.online ? "Online" : "Offline"; $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`; $("#memberCount").textContent = status.memberCount; $("#applicationCount").textContent = applications.length; renderActivity(activity); }
-  if (section === "applications") renderTable(await api("/api/applications"));
+  if (section === "applications") renderApplications(await api("/api/applications?status=pending"));
   if (section === "builder" || section === "welcome") { state.settings = await api("/api/settings"); state.channels = await api("/api/channels"); fillSelects(); }
 }
 
@@ -88,5 +140,5 @@ $("#applicationTypes").addEventListener("click", event => { const card = event.t
 $("#saveSettings").addEventListener("click", async () => { try { state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) }); fillSelects(); message($("#builderMessage"), "Settings saved.", "success"); } catch (error) { message($("#builderMessage"), error.message, "error"); } });
 $("#publishPanel").addEventListener("click", async () => { try { state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) }); const result = await api("/api/panel/publish", { method: "POST" }); state.settings = result.settings; fillSelects(); message($("#builderMessage"), "Panel published to Discord.", "success"); } catch (error) { message($("#builderMessage"), error.message, "error"); } });
 $("#saveWelcome").addEventListener("click", async () => { try { state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...state.settings, welcomeChannelId: $("#welcomeChannelId").value, welcomeImageUrl: $("#welcomeImageUrl").value.trim() }) }); message($("#welcomeMessage"), "Welcome settings saved.", "success"); } catch (error) { message($("#welcomeMessage"), error.message, "error"); } });
-$("#applicationsTable").addEventListener("click", async event => { const button = event.target.closest(".application-action,.text-button"); if (!button || !button.dataset.id) return; try { await api(`/api/applications/${button.dataset.id}/${button.dataset.decision}`, { method: "POST" }); await loadSection("applications"); } catch (error) { alert(error.message); } });
+$("#applicationsList").addEventListener("click", async event => { const button = event.target.closest(".application-action"); if (!button || !button.dataset.id) return; const action = button.dataset.decision === "approved" ? "accept" : "deny"; if (!window.confirm(`Are you sure you want to ${action} this application?`)) return; button.disabled = true; try { await api(`/api/applications/${button.dataset.id}/${button.dataset.decision}`, { method: "POST" }); await loadSection("applications"); } catch (error) { button.disabled = false; alert(error.message); } });
 loadUser();
