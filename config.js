@@ -1,3 +1,3 @@
 window.DASHBOARD_CONFIG = {
-  apiBaseUrl: "https://buzz-rug-black-opposed.trycloudflare.com"
+  apiBaseUrl: "https://clinical-camcorders-contributing-writing.trycloudflare.com"
 };
