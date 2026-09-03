@@ -30,7 +30,21 @@
           <article class="card"><div class="card-heading"><div><p class="eyebrow">Recent activity</p><h3>Server timeline</h3></div><span id="activityCount" class="pill">0</span></div><div id="activityFeed" class="activity-feed"><div class="empty-state">Log in to load activity.</div></div></article>
         </section>
 
-        <section id="applications" class="page-section"><div class="section-heading"><div><p class="eyebrow">Review queue</p><h2>Applications</h2></div><button class="secondary" data-action="refresh">Refresh</button></div><article class="card"><div id="applicationsTable" class="table-wrap"><div class="empty-state">Log in to load applications.</div></div></article></section>
+        <section id="applications" class="page-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Review queue</p>
+              <h2>Pending applications</h2>
+              <p class="section-help">Read every answer and submission detail before accepting or denying an application.</p>
+            </div>
+            <button class="secondary" data-action="refresh">Refresh</button>
+          </div>
+          <article class="card">
+            <div id="applicationsList" class="applications-list">
+              <div class="empty-state">Log in to load applications.</div>
+            </div>
+          </article>
+        </section>
 
         <section id="builder" class="page-section"><div class="section-heading"><div><p class="eyebrow">Configuration</p><h2>Panel builder</h2></div><div class="button-row"><button id="saveSettings" class="primary">Save settings</button><button id="publishPanel" class="secondary">Publish panel</button></div></div><form id="builderForm" class="stack">
           <article class="card"><div class="card-heading"><div><p class="eyebrow">Discord panel</p><h3>Panel appearance and location</h3></div></div><div class="form-grid"><label>Panel channel<select id="applicationPanelChannelId" name="applicationPanelChannelId"></select></label><label>Review channel<select id="applicationReviewChannelId" name="applicationReviewChannelId"></select></label><label>Reviewed-results channel<select id="applicationReviewedChannelId" name="applicationReviewedChannelId"></select></label><label>Reviewer role<select id="applicationReviewerRoleId" name="applicationReviewerRoleId"></select></label><label>Accepted role<select id="applicationAcceptedRoleId" name="applicationAcceptedRoleId"></select></label><label>Menu placeholder<input id="applicationPanelPlaceholder" name="applicationPanelPlaceholder" maxlength="150" /></label><label class="wide">Panel title<input id="applicationPanelTitle" name="applicationPanelTitle" maxlength="256" /></label><label class="wide">Panel description<textarea id="applicationPanelDescription" name="applicationPanelDescription" maxlength="4096"></textarea></label><label>Accent color<input id="applicationPanelColor" name="applicationPanelColor" placeholder="#2bd9fe" /></label><label>Image URL<input id="applicationPanelImageUrl" name="applicationPanelImageUrl" placeholder="https://..." /></label></div><label class="check"><input type="checkbox" id="applicationPanelDeleteOld" name="applicationPanelDeleteOld" /> Delete the previous panel message when publishing</label><p id="builderMessage" class="form-message"></p></article>
