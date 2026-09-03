@@ -1,1 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Discord server command center" />
+    <title>Discord Command Center</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">DC</div>
+          <div>
+            <strong>Command Center</strong>
+            <span>Discord operations</span>
+          </div>
+        </div>
 
+        <nav class="nav" aria-label="Dashboard navigation">
+          <button class="nav-item active" data-section="overview">Overview</button>
+          <button class="nav-item" data-section="moderation">Moderation</button>
+          <button class="nav-item" data-section="welcome">Welcome</button>
+          <button class="nav-item" data-section="roles">Roles</button>
+          <button class="nav-item" data-section="applications">Applications</button>
+          <button class="nav-item" data-section="setup">Setup</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <span class="connection-dot"></span>
+          <span id="connectionText">Not connected</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">SERVER CONTROL</p>
+            <h1 id="pageTitle">Overview</h1>
+          </div>
+          <div class="topbar-actions">
+            <span id="serverName" class="server-name">No server connected</span>
+            <button id="loginButton" class="button button-primary">Log in with Discord</button>
+          </div>
+        </header>
+
+        <section id="overview" class="page-section active-section">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">COMMAND CENTER</p>
+              <h2>Keep your server calm, clear, and controlled.</h2>
+              <p class="muted">Manage bot health, moderation activity, welcome settings, roles, and applications from one private workspace.</p>
+            </div>
+            <div class="status-orb"><span></span> Gateway ready</div>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card"><span>Bot status</span><strong id="botStatus">Offline</strong><small id="botStatusDetail">Connect the dashboard</small></article>
+            <article class="stat-card"><span>Open applications</span><strong id="applicationCount">0</strong><small>Awaiting review</small></article>
+            <article class="stat-card"><span>Recent actions</span><strong id="activityCount">0</strong><small>Stored in the activity log</small></article>
+          </div>
+
+          <div class="content-grid">
+            <article class="panel large-panel">
+              <div class="panel-heading"><div><p class="eyebrow">LATEST OPERATIONS</p><h3>Activity feed</h3></div><button class="text-button" data-section-link="moderation">View all</button></div>
+              <div id="activityFeed" class="activity-list"><div class="empty-state">Log in to load activity.</div></div>
+            </article>
+            <article class="panel security-panel">
+              <p class="eyebrow">SECURITY</p>
+              <h3>Private by design.</h3>
+              <p class="muted">The dashboard never stores your Discord token. Sensitive actions are checked by the DigitalOcean API.</p>
+              <div class="security-line"><span class="security-icon">✓</span> Admin authorization required</div>
+              <div class="security-line"><span class="security-icon">✓</span> HTTPS API connection</div>
+            </article>
+          </div>
+        </section>
+
+        <section id="moderation" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>Moderation activity</h2></div><button class="button button-quiet" data-action="refresh">Refresh</button></div>
+          <article class="panel"><div id="moderationTable" class="table-wrap"><div class="empty-state">Log in to load moderation activity.</div></div></article>
+        </section>
+
+        <section id="welcome" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">MEMBER EXPERIENCE</p><h2>Welcome settings</h2></div></div>
+          <article class="panel form-panel">
+            <label>Welcome channel ID<input id="welcomeChannelId" type="text" placeholder="123456789012345678" /></label>
+            <label>Welcome image URL<input id="welcomeImageUrl" type="url" placeholder="https://example.com/welcome.png" /></label>
+            <p class="form-help">Use a direct public image URL. The bot adds the new member’s avatar and username.</p>
+            <button id="saveWelcome" class="button button-primary">Save welcome settings</button>
+            <p id="welcomeMessage" class="form-message" role="status"></p>
+          </article>
+        </section>
+
+        <section id="roles" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">SERVER ACCESS</p><h2>Role management</h2></div></div>
+          <article class="panel"><p class="muted">The bot manages roles through the Discord commands <code>/addrole</code> and <code>/removerole</code>. The bot role must be above the target role.</p><div id="roleStatus" class="callout">Role management is controlled by Discord administrator permissions.</div></article>
+        </section>
+
+        <section id="applications" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">REVIEW QUEUE</p><h2>Applications</h2></div><button class="button button-quiet" data-action="refresh">Refresh</button></div>
+          <article class="panel"><div id="applicationsTable" class="table-wrap"><div class="empty-state">Log in to load applications.</div></div></article>
+        </section>
+
+        <section id="setup" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">FIRST RUN</p><h2>Setup checklist</h2></div></div>
+          <article class="panel checklist">
+            <div class="check-row"><span>01</span><div><strong>Create a Discord application</strong><p>Use the Discord Developer Portal and create a bot user.</p></div></div>
+            <div class="check-row"><span>02</span><div><strong>Enable Server Members Intent</strong><p>Required for welcome events when members join.</p></div></div>
+            <div class="check-row"><span>03</span><div><strong>Move the bot role above managed roles</strong><p>Required for <code>/addrole</code> and <code>/removerole</code>.</p></div></div>
+            <div class="check-row"><span>04</span><div><strong>Configure the API URL</strong><p>Set <code>apiBaseUrl</code> in <code>config.js</code>.</p></div></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
