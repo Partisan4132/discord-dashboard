@@ -1,879 +1,573 @@
-const API = window.DASHBOARD_CONFIG.apiBaseUrl.replace(/\/$/, "");
-
-const state = {
-  section: "overview",
-  user: null,
-  settings: null,
-  channels: { channels: [], roles: [] },
-  selectedTypeId: null,
-  session: localStorage.getItem("dashboard_session") || ""
-};
-
-const $ = (selector, root = document) => root.querySelector(selector);
-const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-
-async function api(path, options = {}) {
-  const { headers = {}, ...requestOptions } = options;
-
-  const response = await fetch(`${API}${path}`, {
-    ...requestOptions,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(state.session
-        ? { Authorization: `Bearer ${state.session}` }
-        : {}),
-      ...headers
-    }
-  });
-
-  if (response.status === 401) {
-    state.user = null;
-    state.session = "";
-    localStorage.removeItem("dashboard_session");
-    updateConnection(false);
-    throw new Error("Log in with Discord first.");
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      (await response.text()) || `Request failed: ${response.status}`
-    );
-  }
-
-  return response.status === 204 ? null : response.json();
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>\"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#039;"
-  })[character]);
-}
-
-function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : "—";
-}
-
-function message(element, text, type = "") {
-  if (!element) {
-    console.warn("Dashboard message element not found:", text);
-    return;
-  }
-
-  element.textContent = text;
-  element.className = `form-message ${type}`;
-}
-
-function showAuthError(error) {
-  let element = $("#authError");
-
-  if (!element) {
-    element = document.createElement("div");
-    element.id = "authError";
-    element.className = "form-message error";
-    element.style.marginTop = "12px";
-    element.style.maxWidth = "560px";
-
-    const loginButton = $("#loginButton");
-    if (loginButton?.parentElement) {
-      loginButton.parentElement.appendChild(element);
-    } else {
-      document.body.prepend(element);
-    }
-  }
-
-  message(element, error?.message || "Dashboard authentication failed.", "error");
-}
-
-function updateConnection(connected, user = null) {
-  const connectionText = $("#connectionText");
-  const connectionDot = $(".connection-dot");
-  const loginButton = $("#loginButton");
-
-  if (connectionText) {
-    connectionText.textContent = connected
-      ? "Connected"
-      : "Not connected";
-  }
-
-  if (connectionDot) {
-    connectionDot.style.background = connected
-      ? "#58d893"
-      : "#f0a84b";
-  }
-
-  if (loginButton) {
-    loginButton.textContent = connected
-      ? "Log out"
-      : "Log in with Discord";
-  }
-
-  if (user) {
-    const serverName = $("#serverName");
-    const sidebarServerName = $("#sidebarServerName");
-
-    if (serverName) {
-      serverName.textContent = user.guildName || "Connected server";
-    }
-
-    if (sidebarServerName) {
-      sidebarServerName.textContent = user.guildName || "Connected server";
-    }
-  }
-}
-
-function showSection(section) {
-  state.section = section;
-
-  $$(".nav-item").forEach(item => {
-    item.classList.toggle("active", item.dataset.section === section);
-  });
-
-  $$(".page-section").forEach(item => {
-    item.classList.toggle("active-section", item.id === section);
-  });
-
-  const titles = {
-    overview: "Overview",
-    applications: "Applications",
-    panels: "Panels",
-    pending: "Pending applications",
-    welcome: "Welcome"
-  };
-
-  const pageTitle = $("#pageTitle");
-  if (pageTitle) {
-    pageTitle.textContent = titles[section] || "Dashboard";
-  }
-
-  if (state.user) {
-    loadSection(section).catch(error => {
-      console.error("Section load failed:", error);
-    });
-  }
-}
-
-function renderActivity(items = []) {
-  const activityCount = $("#activityCount");
-  const activityFeed = $("#activityFeed");
-
-  if (activityCount) {
-    activityCount.textContent = items.length;
-  }
-
-  if (!activityFeed) return;
-
-  activityFeed.innerHTML = items.length
-    ? items.slice(0, 12).map(item => `
-        <div class="activity-row">
-          <div>
-            <strong>${escapeHtml(item.action || item.type || "Activity")}</strong>
-            <small>${escapeHtml(item.target || item.username || "Server event")}</small>
-          </div>
-          <small>${formatDate(item.at || item.createdAt)}</small>
-        </div>
-      `).join("")
-    : '<div class="empty-state">No activity recorded yet.</div>';
-}
-
-function formatDuration(seconds) {
-  const total = Number(seconds || 0);
-  if (!Number.isFinite(total) || total <= 0) return "—";
-
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = Math.floor(total % 60);
-
-  return [
-    hours ? `${hours}h` : "",
-    minutes ? `${minutes}m` : "",
-    secs ? `${secs}s` : ""
-  ].filter(Boolean).join(" ") || "0s";
-}
-
-function formatRelativeDate(value) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return escapeHtml(value);
-
-  const days = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 86400000)
-  );
-
-  if (!days) return "today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
-
-  const months = Math.floor(days / 30);
-  return `${months} month${months === 1 ? "" : "s"} ago`;
-}
-
-function applicationStats(row) {
-  const stats = row.submissionStats || row.stats || {};
-
-  return {
-    duration: formatDuration(
-      row.durationSeconds ?? row.duration ?? stats.durationSeconds ?? stats.duration
-    ),
-    joined: formatRelativeDate(
-      row.joinedAt ?? row.guildJoinedAt ?? stats.joinedAt ?? stats.guildJoinedAt
-    ),
-    submitted: formatDate(row.submittedAt ?? row.createdAt)
-  };
-}
-
-function renderApplications(rows = []) {
-  const applicationsList = $("#applicationsList");
-  if (!applicationsList) return;
-
-  const pending = rows.filter(row => row.status === "pending");
-
-  applicationsList.innerHTML = pending.length
-    ? pending.map(row => {
-        const stats = applicationStats(row);
-        const answers = Array.isArray(row.answers) ? row.answers : [];
-        const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
-        const displayUser = row.userMention || row.mention || `<@${row.userId || ""}>`;
-
-        return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
-          <div class="application-card-head">
-            <div>
-              <p class="eyebrow">${escapeHtml(row.typeName || row.typeId || "Application")} application submitted</p>
-              <h3>${escapeHtml(applicant)}'s “${escapeHtml(row.typeName || row.typeId || "Application")}” Application Submitted</h3>
-              <p class="application-user">User: ${escapeHtml(displayUser)}</p>
-            </div>
-            <span class="status">Pending</span>
-          </div>
-
-          <div class="answer-list">
-            ${answers.length
-              ? answers.map((item, index) => `
-                  <div class="answer-item">
-                    <div class="answer-question">
-                      ${index + 1}. ${escapeHtml(item.question || item.label || `Question ${index + 1}`)}
-                    </div>
-                    <div class="answer-value">
-                      ${escapeHtml(item.answer || "(no answer)").split(String.fromCharCode(10)).join(String.fromCharCode(60, 98, 114, 62))}
-                    </div>
-                  </div>
-                `).join("")
-              : '<div class="empty-state">No answers were recorded.</div>'}
-          </div>
-
-          <div class="submission-stats">
-            <p class="eyebrow">Submission stats</p>
-            <div class="stats-grid">
-              <div><span>User ID</span><strong>${escapeHtml(row.userId || "—")}</strong></div>
-              <div><span>Username</span><strong>${escapeHtml(applicant)}</strong></div>
-              <div><span>Duration</span><strong>${escapeHtml(stats.duration)}</strong></div>
-              <div><span>Joined guild</span><strong>${escapeHtml(stats.joined)}</strong></div>
-              <div><span>Submitted</span><strong>${escapeHtml(stats.submitted)}</strong></div>
-            </div>
-          </div>
-
-          <div class="application-actions">
-            <button class="primary application-action" data-id="${escapeHtml(row.id)}" data-decision="approved">
-              Accept application
-            </button>
-            <button class="danger application-action" data-id="${escapeHtml(row.id)}" data-decision="denied">
-              Deny application
-            </button>
-          </div>
-        </article>`;
-      }).join("")
-    : '<div class="empty-state">There are no pending applications.</div>';
-}
-
-function options(items, selected, emptyLabel) {
-  return `<option value="">${escapeHtml(emptyLabel)}</option>` +
-    items.map(item => `
-      <option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>
-        ${escapeHtml(item.name)}
-      </option>
-    `).join("");
-}
-
-function channelOptions(selected, emptyLabel) {
-  return options(state.channels.channels || [], selected, emptyLabel);
-}
-
-function roleOptions(selected, emptyLabel) {
-  return options(state.channels.roles || [], selected, emptyLabel);
-}
-
-function selectedType() {
-  return (state.settings?.applicationTypes || []).find(
-    type => type.id === state.selectedTypeId
-  ) || state.settings?.applicationTypes?.[0] || null;
-}
-
-function renderApplicationList() {
-  const applicationTypeCount = $("#applicationTypeCount");
-  const applicationTypeList = $("#applicationTypeList");
-  const types = state.settings?.applicationTypes || [];
-
-  if (applicationTypeCount) {
-    applicationTypeCount.textContent = types.length;
-  }
-
-  if (!applicationTypeList) return;
-
-  applicationTypeList.innerHTML = types.length
-    ? types.map(type => `
-        <button type="button" class="resource-item ${type.id === state.selectedTypeId ? "selected" : ""}" data-type-id="${escapeHtml(type.id)}">
-          <span class="resource-icon">${escapeHtml(type.emoji || "▤")}</span>
-          <span>
-            <strong>${escapeHtml(type.name)}</strong>
-            <small>${type.enabled !== false ? "Enabled" : "Disabled"} · ${(type.questions || []).length} questions</small>
-          </span>
-        </button>
-      `).join("")
-    : '<div class="empty-state">No applications yet.</div>';
-}
-
-function renderApplicationEditor() {
-  const type = selectedType();
-  renderApplicationList();
-
-  const applicationForm = $("#applicationForm");
-  if (!applicationForm) return;
-
-  if (!type) {
-    applicationForm.classList.add("hidden");
-    return;
-  }
-
-  applicationForm.classList.remove("hidden");
-
-  const name = $("#selectedApplicationName");
-  const description = $("#selectedApplicationDescription");
-  const reviewerRole = $("#selectedApplicationReviewerRole");
-  const acceptedRole = $("#selectedApplicationAcceptedRole");
-  const reviewChannel = $("#selectedApplicationReviewChannel");
-  const enabled = $("#selectedApplicationEnabled");
-  const completionMessage = $("#selectedApplicationCompletionMessage");
-  const acceptedMessage = $("#selectedApplicationAcceptedMessage");
-  const deniedMessage = $("#selectedApplicationDeniedMessage");
-  const questions = $("#selectedApplicationQuestions");
-
-  if (name) name.value = type.name || "";
-  if (description) description.value = type.description || "";
-
-  if (reviewerRole) {
-    reviewerRole.innerHTML = roleOptions(
-      type.reviewerRoleId,
-      "Choose reviewer role"
-    );
-    reviewerRole.value = type.reviewerRoleId || "";
-  }
-
-  if (acceptedRole) {
-    acceptedRole.innerHTML = roleOptions(
-      type.approvalRoleId,
-      "No accepted role"
-    );
-    acceptedRole.value = type.approvalRoleId || "";
-  }
-
-  if (reviewChannel) {
-    reviewChannel.innerHTML = channelOptions(
-      type.reviewChannelId,
-      "Use panel review channel"
-    );
-    reviewChannel.value = type.reviewChannelId || "";
-  }
-
-  if (enabled) enabled.checked = type.enabled !== false;
-  if (completionMessage) completionMessage.value = type.completionMessage || "";
-  if (acceptedMessage) acceptedMessage.value = type.acceptedMessage || "";
-  if (deniedMessage) deniedMessage.value = type.deniedMessage || "";
-
-  if (!questions) return;
-
-  questions.innerHTML = (type.questions || []).length
-    ? type.questions.map((question, index) => `
-        <div class="question-row" data-question-index="${index}">
-          <label>
-            <span class="field-label">Question ${index + 1}</span>
-            <textarea data-q-field="label" maxlength="1000">${escapeHtml(question.label)}</textarea>
-          </label>
-          <label>
-            <span class="field-label">Max characters</span>
-            <input data-q-field="maxLength" type="number" min="20" max="2000" value="${Number(question.maxLength || 1200)}" />
-          </label>
-          <label class="check">
-            <input data-q-field="required" type="checkbox" ${question.required !== false ? "checked" : ""} />
-            Required
-            <button type="button" class="danger remove-question">Remove</button>
-          </label>
-        </div>
-      `).join("")
-    : '<div class="empty-state">No questions yet. Add your first question.</div>';
-}
-
-function saveEditorToState() {
-  const type = selectedType();
-  if (!type) return;
-
-  const name = $("#selectedApplicationName");
-  const description = $("#selectedApplicationDescription");
-  const reviewerRole = $("#selectedApplicationReviewerRole");
-  const acceptedRole = $("#selectedApplicationAcceptedRole");
-  const reviewChannel = $("#selectedApplicationReviewChannel");
-  const enabled = $("#selectedApplicationEnabled");
-  const completionMessage = $("#selectedApplicationCompletionMessage");
-  const acceptedMessage = $("#selectedApplicationAcceptedMessage");
-  const deniedMessage = $("#selectedApplicationDeniedMessage");
-  const questionsContainer = $("#selectedApplicationQuestions");
-
-  if (name) type.name = name.value.trim() || "Application";
-  if (description) type.description = description.value.trim() || "Start this application";
-  if (reviewerRole) type.reviewerRoleId = reviewerRole.value;
-  if (acceptedRole) type.approvalRoleId = acceptedRole.value;
-  if (reviewChannel) type.reviewChannelId = reviewChannel.value;
-  if (enabled) type.enabled = enabled.checked;
-  if (completionMessage) type.completionMessage = completionMessage.value.trim();
-  if (acceptedMessage) type.acceptedMessage = acceptedMessage.value.trim();
-  if (deniedMessage) type.deniedMessage = deniedMessage.value.trim();
-
-  if (!questionsContainer) return;
-
-  type.questions = $$(".question-row", questionsContainer).map((row, index) => ({
-    id: type.questions?.[index]?.id || crypto.randomUUID(),
-    label: row.querySelector('[data-q-field="label"]')?.value.trim() || "Question",
-    maxLength: Number(row.querySelector('[data-q-field="maxLength"]')?.value || 1200),
-    required: row.querySelector('[data-q-field="required"]')?.checked !== false
-  }));
-}
-
-function renderPanelChecklist() {
-  const panelApplicationChecklist = $("#panelApplicationChecklist");
-  const types = state.settings?.applicationTypes || [];
-
-  if (!panelApplicationChecklist) return;
-
-  panelApplicationChecklist.innerHTML = types.length
-    ? types.map(type => `
-        <label class="panel-check">
-          <input type="checkbox" data-panel-type="${escapeHtml(type.id)}" ${type.enabled !== false ? "checked" : ""} />
-          <span>
-            <strong>${escapeHtml(type.name)}</strong>
-            <small>${escapeHtml(type.description || "Application form")}</small>
-          </span>
-        </label>
-      `).join("")
-    : '<div class="empty-state">Create an application first.</div>';
-}
-
-function fillPanelFields() {
-  const settings = state.settings;
-  if (!settings) return;
-
-  const panelChannel = $("#applicationPanelChannelId");
-  const reviewChannel = $("#applicationReviewChannelId");
-  const reviewedChannel = $("#applicationReviewedChannelId");
-  const reviewerRole = $("#applicationReviewerRoleId");
-  const acceptedRole = $("#applicationAcceptedRoleId");
-
-  if (panelChannel) {
-    panelChannel.innerHTML = channelOptions(
-      settings.applicationPanelChannelId,
-      "Choose panel channel"
-    );
-    panelChannel.value = settings.applicationPanelChannelId || "";
-  }
-
-  if (reviewChannel) {
-    reviewChannel.innerHTML = channelOptions(
-      settings.applicationReviewChannelId,
-      "Choose review channel"
-    );
-    reviewChannel.value = settings.applicationReviewChannelId || "";
-  }
-
-  if (reviewedChannel) {
-    reviewedChannel.innerHTML = channelOptions(
-      settings.applicationReviewedChannelId,
-      "No reviewed-results channel"
-    );
-    reviewedChannel.value = settings.applicationReviewedChannelId || "";
-  }
-
-  if (reviewerRole) {
-    reviewerRole.innerHTML = roleOptions(
-      settings.applicationReviewerRoleId,
-      "Choose reviewer role"
-    );
-    reviewerRole.value = settings.applicationReviewerRoleId || "";
-  }
-
-  if (acceptedRole) {
-    acceptedRole.innerHTML = roleOptions(
-      settings.applicationAcceptedRoleId,
-      "No global accepted role"
-    );
-    acceptedRole.value = settings.applicationAcceptedRoleId || "";
-  }
-
-  const panelTitle = $("#applicationPanelTitle");
-  const panelDescription = $("#applicationPanelDescription");
-  const panelColor = $("#applicationPanelColor");
-  const panelImageUrl = $("#applicationPanelImageUrl");
-  const panelPlaceholder = $("#applicationPanelPlaceholder");
-  const panelInteraction = $("#applicationPanelInteraction");
-  const deleteOld = $("#applicationPanelDeleteOld");
-
-  if (panelTitle) panelTitle.value = settings.applicationPanelTitle || "";
-  if (panelDescription) panelDescription.value = settings.applicationPanelDescription || "";
-  if (panelColor) panelColor.value = settings.applicationPanelColor || "#2bd9fe";
-  if (panelImageUrl) panelImageUrl.value = settings.applicationPanelImageUrl || "";
-  if (panelPlaceholder) panelPlaceholder.value = settings.applicationPanelPlaceholder || "Choose an application type";
-  if (panelInteraction) panelInteraction.value = settings.applicationPanelInteraction || "dropdown";
-  if (deleteOld) deleteOld.checked = settings.applicationPanelDeleteOld !== false;
-
-  renderPanelChecklist();
-}
-
-async function completeOAuthHandoff() {
-  const hashParams = new URLSearchParams(
-    window.location.hash.replace(/^#/, "")
-  );
-  const queryParams = new URLSearchParams(window.location.search);
-  const token = hashParams.get("oauth") || queryParams.get("oauth");
-
-  if (!token) return;
-
-  const response = await fetch(`${API}/auth/handoff`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json"
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import crypto from "node:crypto";
+import { PermissionFlagsBits } from "discord.js";
+import { config } from "./config.js";
+import {
+  getApplication,
+  guildSettings,
+  listApplications,
+  listModeration,
+  saveGuildSettings
+} from "./store.js";
+import {
+  effectiveSettings,
+  isReviewer,
+  normalizeApplicationTypes,
+  reviewApplication
+} from "./applications.js";
+import { buildApplicationPanel } from "./panel.js";
+
+const app = express();
+const port = Number(process.env.API_PORT || 3001);
+const sessionSecret = process.env.DASHBOARD_SESSION_SECRET || "";
+const discordClientSecret = process.env.DISCORD_CLIENT_SECRET || "";
+const discordRedirectUri = process.env.DISCORD_REDIRECT_URI || "";
+
+const origins = (process.env.DASHBOARD_ORIGIN || "")
+  .split(",")
+  .map(value => value.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const oauthHandoffs = new Map();
+const oauthHandoffGracePeriodMs = 5 * 60 * 1000;
+
+app.use(express.json({ limit: "300kb" }));
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (origins.includes(origin)) return callback(null, true);
+      return callback(new Error("Origin not allowed"));
     },
-    body: JSON.stringify({ token })
-  });
+    credentials: true
+  })
+);
 
-  const body = await response.text();
+function base64url(value) {
+  return Buffer.from(value).toString("base64url");
+}
 
-  if (!response.ok) {
-    throw new Error(`OAuth handoff failed (${response.status}): ${body}`);
+function createSession(payload) {
+  if (!sessionSecret) {
+    throw new Error("DASHBOARD_SESSION_SECRET is not configured.");
   }
 
-  let result;
+  const body = base64url(
+    JSON.stringify({
+      ...payload,
+      exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+    })
+  );
+
+  const signature = crypto
+    .createHmac("sha256", sessionSecret)
+    .update(body)
+    .digest("base64url");
+
+  return `${body}.${signature}`;
+}
+
+function readSession(value) {
+  if (!value || !sessionSecret) return null;
+
+  const [body, signature] = String(value).split(".");
+  if (!body || !signature) return null;
+
+  const expected = crypto
+    .createHmac("sha256", sessionSecret)
+    .update(body)
+    .digest("base64url");
+
+  if (
+    expected.length !== signature.length ||
+    !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  ) {
+    return null;
+  }
+
   try {
-    result = JSON.parse(body);
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    return payload.exp > Date.now() ? payload : null;
   } catch {
-    throw new Error("OAuth handoff returned invalid JSON.");
+    return null;
   }
+}
 
-  if (!result.session) {
-    throw new Error("OAuth handoff returned no session.");
-  }
-
-  state.session = result.session;
-  localStorage.setItem("dashboard_session", result.session);
-
-  history.replaceState(
-    null,
-    "",
-    window.location.pathname + window.location.search
+function cookies(request) {
+  return Object.fromEntries(
+    String(request.headers.cookie || "")
+      .split(";")
+      .map(value => value.trim().split("="))
+      .filter(parts => parts.length >= 2)
+      .map(([key, ...rest]) => [key, decodeURIComponent(rest.join("="))])
   );
 }
 
-function collectSettings() {
-  saveEditorToState();
+function setCookie(response, name, value, maxAge = 60 * 60 * 24 * 7) {
+  response.setHeader(
+    "Set-Cookie",
+    `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
+  );
+}
 
-  const enabledFromPanel = new Set(
-    $$('[data-panel-type]:checked').map(input => input.dataset.panelType)
+function clearCookie(response, name) {
+  response.setHeader(
+    "Set-Cookie",
+    `${name}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None`
+  );
+}
+
+function createOAuthHandoff(session) {
+  const token = crypto.randomBytes(32).toString("hex");
+
+  oauthHandoffs.set(token, {
+    session,
+    expiresAt: Date.now() + oauthHandoffGracePeriodMs
+  });
+
+  return token;
+}
+
+function takeOAuthHandoff(token) {
+  const key = String(token || "");
+  const item = oauthHandoffs.get(key);
+
+  if (!item) return null;
+
+  if (item.expiresAt <= Date.now()) {
+    oauthHandoffs.delete(key);
+    return null;
+  }
+
+  // Do not delete immediately. A browser, extension, or page reload can
+  // submit the same callback fragment more than once. Returning the same
+  // short-lived session makes the handoff safely idempotent.
+  return item.session;
+}
+
+function dashboardOrigin() {
+  return origins[0] || "http://localhost:8080";
+}
+
+function requireSession(request, response, next ) {
+  const authorization = String(request.headers.authorization || "");
+  const bearer = authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : "";
+
+  const session = readSession(
+    bearer || cookies(request).dashboard_session
   );
 
-  const applicationTypes = (state.settings?.applicationTypes || []).map(type => ({
-    ...type,
-    enabled: enabledFromPanel.size
-      ? enabledFromPanel.has(type.id)
-      : type.enabled !== false
-  }));
+  if (!session || session.guildId !== config.guildId) {
+    return response.status(401).json({ error: "Login required." });
+  }
+
+  request.dashboardSession = session;
+  next();
+}
+
+function guildFor(client) {
+  return client.guilds.cache.get(config.guildId) || null;
+}
+
+function validUrl(value) {
+  if (!value) return "";
+
+  try {
+    const url = new URL(String(value));
+    return ["http:", "https:"].includes(url.protocol ) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function cleanSettings(body) {
+  const input = body && typeof body === "object" ? body : {};
 
   return {
-    ...state.settings,
-    applicationTypes,
-    applicationPanelChannelId: $("#applicationPanelChannelId")?.value || "",
-    applicationReviewChannelId: $("#applicationReviewChannelId")?.value || "",
-    applicationReviewedChannelId: $("#applicationReviewedChannelId")?.value || "",
-    applicationReviewerRoleId: $("#applicationReviewerRoleId")?.value || "",
-    applicationAcceptedRoleId: $("#applicationAcceptedRoleId")?.value || "",
-    applicationPanelTitle: $("#applicationPanelTitle")?.value.trim() || "",
-    applicationPanelDescription: $("#applicationPanelDescription")?.value.trim() || "",
-    applicationPanelColor: $("#applicationPanelColor")?.value.trim() || "#2bd9fe",
-    applicationPanelImageUrl: $("#applicationPanelImageUrl")?.value.trim() || "",
-    applicationPanelInteraction: $("#applicationPanelInteraction")?.value || "dropdown",
-    applicationPanelPlaceholder: $("#applicationPanelPlaceholder")?.value.trim() || "Choose an application type",
-    applicationPanelDeleteOld: $("#applicationPanelDeleteOld")?.checked !== false
+    welcomeChannelId: String(input.welcomeChannelId || "").trim(),
+    welcomeImageUrl: validUrl(input.welcomeImageUrl),
+    applicationPanelChannelId: String(input.applicationPanelChannelId || "").trim(),
+    applicationPanelMessageId: String(input.applicationPanelMessageId || "").trim(),
+    applicationPanelTitle: String(input.applicationPanelTitle || "Applications")
+      .trim()
+      .slice(0, 256),
+    applicationPanelDescription: String(input.applicationPanelDescription || "")
+      .trim()
+      .slice(0, 4096),
+    applicationPanelColor: /^#?[0-9a-fA-F]{6}$/.test(
+      String(input.applicationPanelColor || "")
+    )
+      ? String(input.applicationPanelColor).startsWith("#")
+        ? String(input.applicationPanelColor)
+        : `#${input.applicationPanelColor}`
+      : "#2bd9fe",
+    applicationPanelImageUrl: validUrl(input.applicationPanelImageUrl),
+    applicationPanelPlaceholder: String(
+      input.applicationPanelPlaceholder || "Choose an application type"
+    )
+      .trim()
+      .slice(0, 150),
+    applicationPanelDeleteOld: input.applicationPanelDeleteOld !== false,
+    applicationReviewChannelId: String(input.applicationReviewChannelId || "").trim(),
+    applicationReviewedChannelId: String(input.applicationReviewedChannelId || "").trim(),
+    applicationReviewerRoleId: String(input.applicationReviewerRoleId || "").trim(),
+    applicationAcceptedRoleId: String(input.applicationAcceptedRoleId || "").trim(),
+    applicationTypes: normalizeApplicationTypes(input.applicationTypes)
   };
 }
 
-async function loadSection(section) {
-  if (section === "overview") {
-    const [status, activity, applications] = await Promise.all([
-      api("/api/status"),
-      api("/api/activity"),
-      api("/api/applications?status=pending")
-    ]);
+function activity(client) {
+  const moderation = listModeration(config.guildId).map(item => ({
+    ...item,
+    type: "moderation",
+    at: item.at
+  }));
 
-    const botStatus = $("#botStatus");
-    const botStatusDetail = $("#botStatusDetail");
-    const memberCount = $("#memberCount");
-    const applicationCount = $("#applicationCount");
+  const applications = listApplications(config.guildId).map(item => ({
+    action: `application_${item.status}`,
+    type: "application",
+    target: item.username || item.userId,
+    moderator: item.reviewerId || "—",
+    at: item.updatedAt || item.createdAt
+  }));
 
-    if (botStatus) botStatus.textContent = status.online ? "Online" : "Offline";
-    if (botStatusDetail) botStatusDetail.textContent = `${status.guildName} · ${status.memberCount} members`;
-    if (memberCount) memberCount.textContent = status.memberCount;
-    if (applicationCount) applicationCount.textContent = applications.length;
+  return [...moderation, ...applications]
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+    .slice(0, 100);
+}
 
-    renderActivity(activity);
-  }
+export function registerDashboardRoutes(client) {
+  app.get("/api/health", (_request, response) => {
+    response.json({
+      ok: true,
+      service: "discord-dashboard-api",
+      botReady: client.isReady(),
+      time: new Date().toISOString()
+    });
+  });
 
-  if (section === "pending") {
-    renderApplications(await api("/api/applications?status=pending"));
-  }
-
-  if (section === "applications" || section === "panels" || section === "welcome") {
-    state.settings = await api("/api/settings");
-    state.channels = await api("/api/channels");
-    state.selectedTypeId = state.selectedTypeId || state.settings.applicationTypes?.[0]?.id || null;
-
-    if (section === "applications") {
-      renderApplicationEditor();
+  app.get("/auth/discord", (_request, response) => {
+    if (!sessionSecret || !discordClientSecret || !discordRedirectUri) {
+      return response.status(503).send("Discord OAuth is not configured yet.");
     }
 
-    if (section === "panels") {
-      fillPanelFields();
+    const state = crypto.randomBytes(24).toString("hex");
+
+    response.setHeader(
+      "Set-Cookie",
+      `oauth_state=${state}; Max-Age=600; Path=/; HttpOnly; Secure; SameSite=Lax`
+    );
+
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: discordRedirectUri,
+      response_type: "code",
+      scope: "identify guilds",
+      state
+    });
+
+    response.redirect(`https://discord.com/oauth2/authorize?${params}` );
+  });
+
+  app.get("/auth/discord/callback", async (request, response) => {
+    try {
+      const storedState = cookies(request).oauth_state;
+
+      if (
+        !request.query.code ||
+        !request.query.state ||
+        !storedState ||
+        request.query.state !== storedState
+      ) {
+        return response.status(400).send("OAuth state or code is invalid.");
+      }
+
+      const tokenResponse = await fetch(
+        "https://discord.com/api/v10/oauth2/token",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: config.clientId,
+            client_secret: discordClientSecret,
+            grant_type: "authorization_code",
+            code: String(request.query.code ),
+            redirect_uri: discordRedirectUri
+          })
+        }
+      );
+
+      if (!tokenResponse.ok) {
+        const details = await tokenResponse.text();
+        throw new Error(`Discord token exchange failed: ${details}`);
+      }
+
+      const token = await tokenResponse.json();
+      const discordHeaders = {
+        Authorization: `Bearer ${token.access_token}`
+      };
+
+      const [userResponse, guildsResponse] = await Promise.all([
+        fetch("https://discord.com/api/v10/users/@me", {
+          headers: discordHeaders
+        } ),
+        fetch("https://discord.com/api/v10/users/@me/guilds", {
+          headers: discordHeaders
+        } )
+      ]);
+
+      if (!userResponse.ok || !guildsResponse.ok) {
+        throw new Error("Discord identity lookup failed.");
+      }
+
+      const user = await userResponse.json();
+      const guilds = await guildsResponse.json();
+      const guild = guilds.find(item => item.id === config.guildId);
+      const ownerIds = String(process.env.OWNER_DISCORD_ID || "")
+        .split(",")
+        .map(value => value.trim())
+        .filter(Boolean);
+
+      const isAdmin = Boolean(
+        guild &&
+          ((BigInt(guild.permissions || "0") &
+            BigInt(PermissionFlagsBits.Administrator)) !==
+            0n ||
+            ownerIds.includes(user.id))
+      );
+
+      if (!isAdmin) {
+        return response
+          .status(403)
+          .send("You must be a server administrator to use this dashboard.");
+      }
+
+      const session = createSession({
+        userId: user.id,
+        username: user.username,
+        guildId: config.guildId
+      });
+
+      const handoff = createOAuthHandoff(session);
+
+      response.redirect(`${dashboardOrigin()}#oauth=${handoff}`);
+    } catch (error) {
+      console.error("Discord OAuth failed:", error);
+      response.status(500).send("Discord login failed. Check the API logs.");
+    }
+  });
+
+  app.post("/auth/handoff", (request, response) => {
+    const session = takeOAuthHandoff(request.body?.token);
+
+    if (!session) {
+      return response
+        .status(401)
+        .json({ error: "OAuth handoff expired or already used." });
     }
 
-    if (section === "welcome") {
-      const welcomeChannel = $("#welcomeChannelId");
-      const welcomeImage = $("#welcomeImageUrl");
+    response.json({ session });
+  });
 
-      if (welcomeChannel) {
-        welcomeChannel.innerHTML = channelOptions(
-          state.settings.welcomeChannelId,
-          "Choose welcome channel"
+  app.post("/auth/logout", (_request, response) => {
+    clearCookie(response, "dashboard_session");
+    response.status(204).end();
+  });
+
+  app.get("/api/me", requireSession, (request, response) => {
+    const guild = guildFor(client);
+
+    response.json({
+      id: request.dashboardSession.userId,
+      username: request.dashboardSession.username,
+      guildId: config.guildId,
+      guildName: guild?.name || "Connected server"
+    });
+  });
+
+  app.get("/api/status", requireSession, (_request, response) => {
+    const guild = guildFor(client);
+
+    response.json({
+      online: client.isReady(),
+      guildName: guild?.name || "Unknown server",
+      guildId: config.guildId,
+      memberCount: guild?.memberCount || 0
+    });
+  });
+
+  app.get("/api/activity", requireSession, (_request, response) => {
+    response.json(activity(client));
+  });
+
+  app.get("/api/settings", requireSession, (_request, response) => {
+    response.json(effectiveSettings(guildSettings(config.guildId)));
+  });
+
+  app.put("/api/settings", requireSession, (request, response) => {
+    const saved = saveGuildSettings(
+      config.guildId,
+      cleanSettings(request.body)
+    );
+
+    response.json(effectiveSettings(saved));
+  });
+
+  app.get("/api/channels", requireSession, (_request, response) => {
+    const guild = guildFor(client);
+
+    if (!guild) {
+      return response
+        .status(503)
+        .json({ error: "Bot is not connected to the configured guild." });
+    }
+
+    response.json({
+      channels: [...guild.channels.cache.values()]
+        .filter(channel => channel.isTextBased() && !channel.isThread())
+        .map(channel => ({
+          id: channel.id,
+          name: channel.name,
+          type: channel.type
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      roles: [...guild.roles.cache.values()]
+        .filter(role => !role.managed)
+        .map(role => ({
+          id: role.id,
+          name: role.name,
+          position: role.position
+        }))
+        .sort((a, b) => b.position - a.position)
+    });
+  });
+
+  app.get("/api/applications", requireSession, (request, response) => {
+    response.json(
+      listApplications(config.guildId, String(request.query.status || ""))
+    );
+  });
+
+  app.post(
+    "/api/applications/:id/:decision",
+    requireSession,
+    async (request, response) => {
+      try {
+        const guild = guildFor(client);
+        const application = getApplication(config.guildId, request.params.id);
+
+        if (!guild || !application) {
+          return response.status(404).json({ error: "Application not found." });
+        }
+
+        const settings = effectiveSettings(guildSettings(config.guildId));
+        const type = settings.applicationTypes.find(
+          item => item.id === application.typeId
         );
-        welcomeChannel.value = state.settings.welcomeChannelId || "";
-      }
+        const member = await guild.members.fetch(
+          request.dashboardSession.userId
+        );
 
-      if (welcomeImage) {
-        welcomeImage.value = state.settings.welcomeImageUrl || "";
+        if (!type || !(await isReviewer(member, settings, type))) {
+          return response
+            .status(403)
+            .json({ error: "You are not allowed to review applications." });
+        }
+
+        const decision = String(request.params.decision);
+
+        if (!["approved", "denied", "changes_requested"].includes(decision)) {
+          return response.status(400).json({
+            error: "Invalid review decision."
+          });
+        }
+
+        const result = await reviewApplication({
+          client,
+          guildId: config.guildId,
+          applicationId: application.id,
+          decision,
+          reviewerId: request.dashboardSession.userId
+        });
+
+        response.json(result);
+      } catch (error) {
+        console.error("Dashboard review failed:", error);
+        response
+          .status(500)
+          .json({ error: error.message || "Review failed." });
       }
     }
-  }
-}
+  );
 
-async function loadUser() {
-  try {
-    await completeOAuthHandoff();
-    state.user = await api("/api/me");
-    updateConnection(true, state.user);
+  app.post("/api/panel/publish", requireSession, async (_request, response) => {
+    try {
+      const settings = effectiveSettings(guildSettings(config.guildId));
 
-    const authError = $("#authError");
-    if (authError) authError.remove();
+      if (!settings.applicationPanelChannelId) {
+        return response
+          .status(400)
+          .json({ error: "Choose a panel channel first." });
+      }
 
-    await loadSection(state.section);
-  } catch (error) {
-    console.error("Dashboard authentication failed:", error);
-    updateConnection(false);
-    showAuthError(error);
-  }
-}
+      const channel = await client.channels.fetch(
+        settings.applicationPanelChannelId
+      );
 
-function bind(selector, eventName, handler) {
-  const element = typeof selector === "string"
-    ? document.querySelector(selector)
-    : selector;
+      if (!channel?.isTextBased()) {
+        return response
+          .status(400)
+          .json({ error: "The panel channel is not text-based." });
+      }
 
-  if (!element) {
-    console.warn(`Dashboard element not found: ${selector}`);
-    return;
-  }
+      if (
+        settings.applicationPanelDeleteOld &&
+        settings.applicationPanelMessageId
+      ) {
+        const oldMessage = await channel.messages
+          .fetch(settings.applicationPanelMessageId)
+          .catch(() => null);
+        await oldMessage?.delete().catch(() => {});
+      }
 
-  element.addEventListener(eventName, handler);
-}
+      const message = await channel.send(buildApplicationPanel(settings));
+      const saved = saveGuildSettings(config.guildId, {
+        applicationPanelMessageId: message.id
+      });
 
-function bindAll(selector, eventName, handler) {
-  document.querySelectorAll(selector).forEach(element => {
-    element.addEventListener(eventName, handler);
+      response.json({
+        ok: true,
+        messageId: message.id,
+        settings: effectiveSettings(saved)
+      });
+    } catch (error) {
+      console.error("Panel publish failed:", error);
+      response
+        .status(500)
+        .json({ error: error.message || "Panel publish failed." });
+    }
   });
 }
 
-bindAll("[data-section]", "click", event => {
-  showSection(event.currentTarget.dataset.section);
-});
+export function startDashboardApi(client) {
+  registerDashboardRoutes(client);
 
-bindAll('[data-action="refresh"]', "click", () => {
-  loadSection(state.section).catch(error => alert(error.message));
-});
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, "127.0.0.1", () => {
+      console.log(`Dashboard API listening on 127.0.0.1:${port}`);
+      resolve(server);
+    });
 
-bind("#loginButton", "click", async () => {
-  if (!state.user) {
-    window.location.assign(`${API}/auth/discord`);
-    return;
-  }
-
-  await api("/auth/logout", { method: "POST" }).catch(() => {});
-  state.user = null;
-  state.session = "";
-  localStorage.removeItem("dashboard_session");
-  updateConnection(false);
-});
-
-bind("#addTypeTop", "click", () => {
-  if (!state.settings) return;
-
-  state.settings.applicationTypes = state.settings.applicationTypes || [];
-
-  const type = {
-    id: crypto.randomUUID(),
-    name: "New application",
-    description: "Start this application",
-    emoji: "📋",
-    enabled: true,
-    reviewerRoleId: "",
-    approvalRoleId: "",
-    reviewChannelId: "",
-    questions: []
-  };
-
-  state.settings.applicationTypes.push(type);
-  state.selectedTypeId = type.id;
-  renderApplicationEditor();
-});
-
-bind("#applicationTypeList", "click", event => {
-  const item = event.target.closest("[data-type-id]");
-  if (!item) return;
-
-  saveEditorToState();
-  state.selectedTypeId = item.dataset.typeId;
-  renderApplicationEditor();
-});
-
-bind("#addQuestionTop", "click", () => {
-  const type = selectedType();
-  if (!type) return;
-
-  saveEditorToState();
-  type.questions = type.questions || [];
-  type.questions.push({
-    id: crypto.randomUUID(),
-    label: "New question",
-    required: true,
-    maxLength: 1200
+    server.once("error", reject);
   });
-  renderApplicationEditor();
+}
+
+app.use((error, _request, response, _next) => {
+  console.error("API error:", error.message);
+  response.status(500).json({ error: "API request failed" });
 });
-
-bind("#selectedApplicationQuestions", "click", event => {
-  const button = event.target.closest(".remove-question");
-  if (!button) return;
-
-  const type = selectedType();
-  if (!type) return;
-
-  saveEditorToState();
-  const row = button.closest(".question-row");
-  if (!row) return;
-
-  type.questions.splice(Number(row.dataset.questionIndex), 1);
-  renderApplicationEditor();
-});
-
-bind("#saveApplications", "click", async () => {
-  try {
-    state.settings = await api("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        ...collectSettings(),
-        applicationTypes: state.settings.applicationTypes
-      })
-    });
-
-    renderApplicationEditor();
-    message($("#applicationMessage"), "Application saved.", "success");
-  } catch (error) {
-    message($("#applicationMessage"), error.message, "error");
-  }
-});
-
-bind("#saveSettings", "click", async () => {
-  try {
-    state.settings = await api("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify(collectSettings())
-    });
-
-    fillPanelFields();
-    message($("#builderMessage"), "Panel saved.", "success");
-  } catch (error) {
-    message($("#builderMessage"), error.message, "error");
-  }
-});
-
-bind("#publishPanel", "click", async () => {
-  try {
-    state.settings = await api("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify(collectSettings())
-    });
-
-    const result = await api("/api/panel/publish", { method: "POST" });
-    state.settings = result.settings || state.settings;
-    fillPanelFields();
-    message($("#builderMessage"), "Panel sent to Discord.", "success");
-  } catch (error) {
-    message($("#builderMessage"), error.message, "error");
-  }
-});
-
-bind("#saveWelcome", "click", async () => {
-  try {
-    state.settings = await api("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        ...state.settings,
-        welcomeChannelId: $("#welcomeChannelId")?.value || "",
-        welcomeImageUrl: $("#welcomeImageUrl")?.value.trim() || ""
-      })
-    });
-
-    message($("#welcomeMessage"), "Welcome settings saved.", "success");
-  } catch (error) {
-    message($("#welcomeMessage"), error.message, "error");
-  }
-});
-
-bind("#applicationsList", "click", async event => {
-  const button = event.target.closest(".application-action");
-  if (!button || !button.dataset.id) return;
-
-  const action = button.dataset.decision === "approved" ? "accept" : "deny";
-  if (!window.confirm(`Are you sure you want to ${action} this application?`)) return;
-
-  button.disabled = true;
-
-  try {
-    await api(`/api/applications/${button.dataset.id}/${button.dataset.decision}`, {
-      method: "POST"
-    });
-    await loadSection("pending");
-  } catch (error) {
-    button.disabled = false;
-    alert(error.message);
-  }
-});
-
-loadUser();
