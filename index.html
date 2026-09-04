@@ -12,33 +12,32 @@
     <div class="shell">
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark">DC</span><div><strong>Command Center</strong><small>Server operations</small></div></div>
-        <nav>
-          <button class="nav-item active" data-section="overview">Overview</button>
-          <button class="nav-item" data-section="applications">Applications</button>
-          <button class="nav-item" data-section="builder">Panel builder</button>
-          <button class="nav-item" data-section="welcome">Welcome</button>
+        <div class="server-switcher"><span class="server-avatar">S</span><div><small>CONFIGURING SERVER</small><strong id="sidebarServerName">Your server</strong></div><span class="chevron">⌄</span></div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-section="overview"><span>⌂</span> Overview</button>
+          <button class="nav-item" data-section="applications"><span>▤</span> Applications</button>
+          <button class="nav-item" data-section="panels"><span>▣</span> Panels</button>
+          <button class="nav-item" data-section="pending"><span>◷</span> Pending applications</button>
+          <button class="nav-item" data-section="welcome"><span>✦</span> Welcome</button>
         </nav>
+        <div class="sidebar-label">SYSTEM</div>
+        <nav class="secondary-nav"><button class="nav-item" data-section="overview"><span>⚙</span> Settings</button></nav>
         <div class="sidebar-foot"><span class="connection-dot"></span><span id="connectionText">Not connected</span></div>
       </aside>
 
       <main class="main">
-        <header class="topbar"><div><p class="eyebrow">Discord server dashboard</p><h1 id="pageTitle">Overview</h1></div><button id="loginButton" class="primary">Log in with Discord</button></header>
+        <header class="topbar"><div><p class="eyebrow">Server control center</p><h1 id="pageTitle">Overview</h1></div><button id="loginButton" class="primary">Log in with Discord</button></header>
 
         <section id="overview" class="page-section active-section">
-          <div class="hero"><div><p class="eyebrow">Control plane</p><h2 id="serverName">Your server</h2><p>Manage applications, panel messages, review outcomes, roles, and welcome behavior from one place.</p></div><button class="secondary" data-action="refresh">Refresh data</button></div>
+          <div class="hero"><div><p class="eyebrow">Server overview</p><h2 id="serverName">Your server</h2><p>Build application forms, publish member panels, and review submissions from one workspace.</p></div><button class="secondary" data-action="refresh">Refresh data</button></div>
           <div class="stats"><article class="stat-card"><span>Bot status</span><strong id="botStatus">—</strong><small id="botStatusDetail">Checking connection</small></article><article class="stat-card"><span>Pending applications</span><strong id="applicationCount">—</strong><small>Waiting for review</small></article><article class="stat-card"><span>Members</span><strong id="memberCount">—</strong><small>Current server count</small></article></div>
           <article class="card"><div class="card-heading"><div><p class="eyebrow">Recent activity</p><h3>Server timeline</h3></div><span id="activityCount" class="pill">0</span></div><div id="activityFeed" class="activity-feed"><div class="empty-state">Log in to load activity.</div></div></article>
         </section>
 
-        <section id="applications" class="page-section"><div class="section-heading"><div><p class="eyebrow">Review queue</p><h2>Applications</h2></div><button class="secondary" data-action="refresh">Refresh</button></div><article class="card"><div id="applicationsTable" class="table-wrap"><div class="empty-state">Log in to load applications.</div></div></article></section>
+        <section id="applications" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">Application forms</p><h2>Applications</h2><p class="section-help">Create and edit the forms members complete in Discord DMs.</p></div><button type="button" id="addTypeTop" class="primary">＋ New application</button></div>
+          <div class="workspace-grid"><aside class="resource-list card"><div class="list-heading"><strong>Your applications</strong><span id="applicationTypeCount" class="pill">0</span></div><div id="applicationTypeList" class="resource-items"></div></aside><div class="editor-column"><form id="applicationForm" class="stack"><article class="card"><div class="card-heading"><div><p class="eyebrow">Application options</p><h3>Form details</h3></div><div class="button-row"><button type="button" id="saveApplications" class="primary">Save application</button></div></div><div class="form-grid"><label>Application name<input id="selectedApplicationName" maxlength="100" placeholder="Moderator application" /></label><label>Application description<input id="selectedApplicationDescription" maxlength="100" placeholder="Apply to join the staff team" /></label><label>Reviewer role<select id="selectedApplicationReviewerRole"></select></label><label>Accepted role<select id="selectedApplicationAcceptedRole"></select></label><label>Review channel<select id="selectedApplicationReviewChannel"></select></label><label class="check inline-check"><input id="selectedApplicationEnabled" type="checkbox" checked /> Enabled</label><label class="wide">Completion message<textarea id="selectedApplicationCompletionMessage" maxlength="2000" placeholder="Your application has been submitted for review."></textarea></label><label class="wide">Accepted message<textarea id="selectedApplicationAcceptedMessage" maxlength="2000" placeholder="Your application was accepted."></textarea></label><label class="wide">Denied message<textarea id="selectedApplicationDeniedMessage" maxlength="2000" placeholder="Your application was denied."></textarea></label></div><p id="applicationMessage" class="form-message"></p></article><article class="card"><div class="card-heading"><div><p class="eyebrow">Questions</p><h3>Application questions</h3></div><button type="button" id="addQuestionTop" class="secondary">＋ Add question</button></div><div id="selectedApplicationQuestions" class="questions"></div></article></form></div></div>
+        </section>
 
-        <section id="builder" class="page-section"><div class="section-heading"><div><p class="eyebrow">Configuration</p><h2>Panel builder</h2></div><div class="button-row"><button id="saveSettings" class="primary">Save settings</button><button id="publishPanel" class="secondary">Publish panel</button></div></div><form id="builderForm" class="stack">
-          <article class="card"><div class="card-heading"><div><p class="eyebrow">Discord panel</p><h3>Panel appearance and location</h3></div></div><div class="form-grid"><label>Panel channel<select id="applicationPanelChannelId" name="applicationPanelChannelId"></select></label><label>Review channel<select id="applicationReviewChannelId" name="applicationReviewChannelId"></select></label><label>Reviewed-results channel<select id="applicationReviewedChannelId" name="applicationReviewedChannelId"></select></label><label>Reviewer role<select id="applicationReviewerRoleId" name="applicationReviewerRoleId"></select></label><label>Accepted role<select id="applicationAcceptedRoleId" name="applicationAcceptedRoleId"></select></label><label>Menu placeholder<input id="applicationPanelPlaceholder" name="applicationPanelPlaceholder" maxlength="150" /></label><label class="wide">Panel title<input id="applicationPanelTitle" name="applicationPanelTitle" maxlength="256" /></label><label class="wide">Panel description<textarea id="applicationPanelDescription" name="applicationPanelDescription" maxlength="4096"></textarea></label><label>Accent color<input id="applicationPanelColor" name="applicationPanelColor" placeholder="#2bd9fe" /></label><label>Image URL<input id="applicationPanelImageUrl" name="applicationPanelImageUrl" placeholder="https://..." /></label></div><label class="check"><input type="checkbox" id="applicationPanelDeleteOld" name="applicationPanelDeleteOld" /> Delete the previous panel message when publishing</label><p id="builderMessage" class="form-message"></p></article>
-          <article class="card"><div class="card-heading"><div><p class="eyebrow">Dropdown options</p><h3>Application types and questions</h3></div><button type="button" id="addType" class="secondary">Add application type</button></div><div id="applicationTypes" class="type-list"></div></article>
-        </form></section>
-
-        <section id="welcome" class="page-section"><div class="section-heading"><div><p class="eyebrow">Automation</p><h2>Welcome image</h2></div></div><article class="card"><div class="form-grid"><label>Welcome channel<select id="welcomeChannelId" name="welcomeChannelId"></select></label><label>Background image URL<input id="welcomeImageUrl" name="welcomeImageUrl" placeholder="https://..." /></label></div><button id="saveWelcome" class="primary">Save welcome settings</button><p id="welcomeMessage" class="form-message"></p></article></section>
-      </main>
-    </div>
-  </body>
-</html>
+        <section id="panels" class="page-section">
+          <div class="section-heading"><div><p class="eyebrow">Memb
