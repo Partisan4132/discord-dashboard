@@ -1,23 +1,41 @@
 const API = window.DASHBOARD_CONFIG.apiBaseUrl.replace(/\/$/, "");
-const state = { section: "overview", user: null, settings: null, channels: { channels: [], roles: [] }, selectedTypeId: null };
+const state = {
+  section: "overview",
+  user: null,
+  settings: null,
+  channels: { channels: [], roles: [] },
+  selectedTypeId: null,
+  session: localStorage.getItem("dashboard_session") || ""
+};
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(state.session
+        ? { Authorization: `Bearer ${state.session}` }
+        : {}),
+      ...(options.headers || {})
+    },
     ...options
   });
 
   if (response.status === 401) {
     state.user = null;
+    state.session = "";
+    localStorage.removeItem("dashboard_session");
     updateConnection(false);
     throw new Error("Log in with Discord first.");
   }
 
   if (!response.ok) {
-    throw new Error(await response.text() || `Request failed: ${response.status}`);
+    throw new Error(
+      (await response.text()) || `Request failed: ${response.status}`
+    );
   }
 
   return response.status === 204 ? null : response.json();
@@ -44,8 +62,12 @@ function message(element, text, type = "") {
 
 function updateConnection(connected, user = null) {
   $("#connectionText").textContent = connected ? "Connected" : "Not connected";
-  $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b";
-  $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
+  $(".connection-dot").style.background = connected
+    ? "#58d893"
+    : "#f0a84b";
+  $("#loginButton").textContent = connected
+    ? "Log out"
+    : "Log in with Discord";
 
   if (user) {
     $("#serverName").textContent = user.guildName || "Connected server";
@@ -97,10 +119,7 @@ function renderActivity(items = []) {
 
 function formatDuration(seconds) {
   const total = Number(seconds || 0);
-
-  if (!Number.isFinite(total) || total <= 0) {
-    return "—";
-  }
+  if (!Number.isFinite(total) || total <= 0) return "—";
 
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -257,22 +276,9 @@ function renderApplicationEditor() {
   $("#applicationForm").classList.remove("hidden");
   $("#selectedApplicationName").value = type.name || "";
   $("#selectedApplicationDescription").value = type.description || "";
-
-  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(
-    type.reviewerRoleId,
-    "Choose reviewer role"
-  );
-
-  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(
-    type.approvalRoleId,
-    "No accepted role"
-  );
-
-  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(
-    type.reviewChannelId,
-    "Use panel review channel"
-  );
-
+  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(type.reviewerRoleId, "Choose reviewer role");
+  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role");
+  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel");
   $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || "";
   $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || "";
   $("#selectedApplicationReviewChannel").value = type.reviewChannelId || "";
@@ -343,30 +349,11 @@ function renderPanelChecklist() {
 function fillPanelFields() {
   const settings = state.settings;
 
-  $("#applicationPanelChannelId").innerHTML = channelOptions(
-    settings.applicationPanelChannelId,
-    "Choose panel channel"
-  );
-
-  $("#applicationReviewChannelId").innerHTML = channelOptions(
-    settings.applicationReviewChannelId,
-    "Choose review channel"
-  );
-
-  $("#applicationReviewedChannelId").innerHTML = channelOptions(
-    settings.applicationReviewedChannelId,
-    "No reviewed-results channel"
-  );
-
-  $("#applicationReviewerRoleId").innerHTML = roleOptions(
-    settings.applicationReviewerRoleId,
-    "Choose reviewer role"
-  );
-
-  $("#applicationAcceptedRoleId").innerHTML = roleOptions(
-    settings.applicationAcceptedRoleId,
-    "No global accepted role"
-  );
+  $("#applicationPanelChannelId").innerHTML = channelOptions(settings.applicationPanelChannelId, "Choose panel channel");
+  $("#applicationReviewChannelId").innerHTML = channelOptions(settings.applicationReviewChannelId, "Choose review channel");
+  $("#applicationReviewedChannelId").innerHTML = channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel");
+  $("#applicationReviewerRoleId").innerHTML = roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role");
+  $("#applicationAcceptedRoleId").innerHTML = roleOptions(settings.applicationAcceptedRoleId, "No global accepted role");
 
   [
     "applicationPanelChannelId",
@@ -387,6 +374,35 @@ function fillPanelFields() {
   $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
 
   renderPanelChecklist();
+}
+
+function completeOAuthHandoff() {
+  const hash = new URLSearchParams(
+    window.location.hash.replace(/^#/, "")
+  );
+  const token = hash.get("oauth");
+
+  if (!token) return Promise.resolve();
+
+  return fetch(`${API}/auth/handoff`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  }).then(async response => {
+    if (!response.ok) {
+      throw new Error("OAuth handoff failed.");
+    }
+
+    const result = await response.json();
+    state.session = result.session;
+    localStorage.setItem("dashboard_session", result.session);
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search
+    );
+  });
 }
 
 function collectSettings() {
@@ -454,10 +470,7 @@ async function loadSection(section) {
     }
 
     if (section === "welcome") {
-      $("#welcomeChannelId").innerHTML = channelOptions(
-        state.settings.welcomeChannelId,
-        "Choose welcome channel"
-      );
+      $("#welcomeChannelId").innerHTML = channelOptions(state.settings.welcomeChannelId, "Choose welcome channel");
       $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
       $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
     }
@@ -466,6 +479,7 @@ async function loadSection(section) {
 
 async function loadUser() {
   try {
+    await completeOAuthHandoff();
     state.user = await api("/api/me");
     updateConnection(true, state.user);
     await loadSection(state.section);
@@ -490,8 +504,10 @@ $("#loginButton").addEventListener("click", async () => {
     return;
   }
 
-  await api("/auth/logout", { method: "POST" });
+  await api("/auth/logout", { method: "POST" }).catch(() => {});
   state.user = null;
+  state.session = "";
+  localStorage.removeItem("dashboard_session");
   updateConnection(false);
 });
 
