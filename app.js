@@ -13,16 +13,18 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 async function api(path, options = {}) {
+  const { headers = {}, ...requestOptions } = options;
+
   const response = await fetch(`${API}${path}`, {
+    ...requestOptions,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(state.session
         ? { Authorization: `Bearer ${state.session}` }
         : {}),
-      ...(options.headers || {})
-    },
-    ...options
+      ...headers
+    }
   });
 
   if (response.status === 401) {
@@ -57,26 +59,70 @@ function formatDate(value) {
 }
 
 function message(element, text, type = "") {
+  if (!element) {
+    console.warn("Dashboard message element not found:", text);
+    return;
+  }
+
   element.textContent = text;
   element.className = `form-message ${type}`;
 }
 
+function showAuthError(error) {
+  let element = $("#authError");
+
+  if (!element) {
+    element = document.createElement("div");
+    element.id = "authError";
+    element.className = "form-message error";
+    element.style.marginTop = "12px";
+    element.style.maxWidth = "560px";
+
+    const loginButton = $("#loginButton");
+    if (loginButton?.parentElement) {
+      loginButton.parentElement.appendChild(element);
+    } else {
+      document.body.prepend(element);
+    }
+  }
+
+  message(element, error?.message || "Dashboard authentication failed.", "error");
+}
+
 function updateConnection(connected, user = null) {
-  $("#connectionText").textContent = connected
-    ? "Connected"
-    : "Not connected";
+  const connectionText = $("#connectionText");
+  const connectionDot = $(".connection-dot");
+  const loginButton = $("#loginButton");
 
-  $(".connection-dot").style.background = connected
-    ? "#58d893"
-    : "#f0a84b";
+  if (connectionText) {
+    connectionText.textContent = connected
+      ? "Connected"
+      : "Not connected";
+  }
 
-  $("#loginButton").textContent = connected
-    ? "Log out"
-    : "Log in with Discord";
+  if (connectionDot) {
+    connectionDot.style.background = connected
+      ? "#58d893"
+      : "#f0a84b";
+  }
+
+  if (loginButton) {
+    loginButton.textContent = connected
+      ? "Log out"
+      : "Log in with Discord";
+  }
 
   if (user) {
-    $("#serverName").textContent = user.guildName || "Connected server";
-    $("#sidebarServerName").textContent = user.guildName || "Connected server";
+    const serverName = $("#serverName");
+    const sidebarServerName = $("#sidebarServerName");
+
+    if (serverName) {
+      serverName.textContent = user.guildName || "Connected server";
+    }
+
+    if (sidebarServerName) {
+      sidebarServerName.textContent = user.guildName || "Connected server";
+    }
   }
 }
 
@@ -99,7 +145,10 @@ function showSection(section) {
     welcome: "Welcome"
   };
 
-  $("#pageTitle").textContent = titles[section] || "Dashboard";
+  const pageTitle = $("#pageTitle");
+  if (pageTitle) {
+    pageTitle.textContent = titles[section] || "Dashboard";
+  }
 
   if (state.user) {
     loadSection(section).catch(error => {
@@ -109,9 +158,16 @@ function showSection(section) {
 }
 
 function renderActivity(items = []) {
-  $("#activityCount").textContent = items.length;
+  const activityCount = $("#activityCount");
+  const activityFeed = $("#activityFeed");
 
-  $("#activityFeed").innerHTML = items.length
+  if (activityCount) {
+    activityCount.textContent = items.length;
+  }
+
+  if (!activityFeed) return;
+
+  activityFeed.innerHTML = items.length
     ? items.slice(0, 12).map(item => `
         <div class="activity-row">
           <div>
@@ -173,14 +229,17 @@ function applicationStats(row) {
 }
 
 function renderApplications(rows = []) {
+  const applicationsList = $("#applicationsList");
+  if (!applicationsList) return;
+
   const pending = rows.filter(row => row.status === "pending");
 
-  $("#applicationsList").innerHTML = pending.length
+  applicationsList.innerHTML = pending.length
     ? pending.map(row => {
         const stats = applicationStats(row);
         const answers = Array.isArray(row.answers) ? row.answers : [];
         const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
-        const displayUser = row.userMention || row.mention || `<@${escapeHtml(row.userId || "")}>`;
+        const displayUser = row.userMention || row.mention || `<@${row.userId || ""}>`;
 
         return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
           <div class="application-card-head">
@@ -241,11 +300,11 @@ function options(items, selected, emptyLabel) {
 }
 
 function channelOptions(selected, emptyLabel) {
-  return options(state.channels.channels, selected, emptyLabel);
+  return options(state.channels.channels || [], selected, emptyLabel);
 }
 
 function roleOptions(selected, emptyLabel) {
-  return options(state.channels.roles, selected, emptyLabel);
+  return options(state.channels.roles || [], selected, emptyLabel);
 }
 
 function selectedType() {
@@ -255,10 +314,17 @@ function selectedType() {
 }
 
 function renderApplicationList() {
+  const applicationTypeCount = $("#applicationTypeCount");
+  const applicationTypeList = $("#applicationTypeList");
   const types = state.settings?.applicationTypes || [];
-  $("#applicationTypeCount").textContent = types.length;
 
-  $("#applicationTypeList").innerHTML = types.length
+  if (applicationTypeCount) {
+    applicationTypeCount.textContent = types.length;
+  }
+
+  if (!applicationTypeList) return;
+
+  applicationTypeList.innerHTML = types.length
     ? types.map(type => `
         <button type="button" class="resource-item ${type.id === state.selectedTypeId ? "selected" : ""}" data-type-id="${escapeHtml(type.id)}">
           <span class="resource-icon">${escapeHtml(type.emoji || "▤")}</span>
@@ -275,39 +341,62 @@ function renderApplicationEditor() {
   const type = selectedType();
   renderApplicationList();
 
+  const applicationForm = $("#applicationForm");
+  if (!applicationForm) return;
+
   if (!type) {
-    $("#applicationForm").classList.add("hidden");
+    applicationForm.classList.add("hidden");
     return;
   }
 
-  $("#applicationForm").classList.remove("hidden");
-  $("#selectedApplicationName").value = type.name || "";
-  $("#selectedApplicationDescription").value = type.description || "";
+  applicationForm.classList.remove("hidden");
 
-  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(
-    type.reviewerRoleId,
-    "Choose reviewer role"
-  );
+  const name = $("#selectedApplicationName");
+  const description = $("#selectedApplicationDescription");
+  const reviewerRole = $("#selectedApplicationReviewerRole");
+  const acceptedRole = $("#selectedApplicationAcceptedRole");
+  const reviewChannel = $("#selectedApplicationReviewChannel");
+  const enabled = $("#selectedApplicationEnabled");
+  const completionMessage = $("#selectedApplicationCompletionMessage");
+  const acceptedMessage = $("#selectedApplicationAcceptedMessage");
+  const deniedMessage = $("#selectedApplicationDeniedMessage");
+  const questions = $("#selectedApplicationQuestions");
 
-  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(
-    type.approvalRoleId,
-    "No accepted role"
-  );
+  if (name) name.value = type.name || "";
+  if (description) description.value = type.description || "";
 
-  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(
-    type.reviewChannelId,
-    "Use panel review channel"
-  );
+  if (reviewerRole) {
+    reviewerRole.innerHTML = roleOptions(
+      type.reviewerRoleId,
+      "Choose reviewer role"
+    );
+    reviewerRole.value = type.reviewerRoleId || "";
+  }
 
-  $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || "";
-  $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || "";
-  $("#selectedApplicationReviewChannel").value = type.reviewChannelId || "";
-  $("#selectedApplicationEnabled").checked = type.enabled !== false;
-  $("#selectedApplicationCompletionMessage").value = type.completionMessage || "";
-  $("#selectedApplicationAcceptedMessage").value = type.acceptedMessage || "";
-  $("#selectedApplicationDeniedMessage").value = type.deniedMessage || "";
+  if (acceptedRole) {
+    acceptedRole.innerHTML = roleOptions(
+      type.approvalRoleId,
+      "No accepted role"
+    );
+    acceptedRole.value = type.approvalRoleId || "";
+  }
 
-  $("#selectedApplicationQuestions").innerHTML = (type.questions || []).length
+  if (reviewChannel) {
+    reviewChannel.innerHTML = channelOptions(
+      type.reviewChannelId,
+      "Use panel review channel"
+    );
+    reviewChannel.value = type.reviewChannelId || "";
+  }
+
+  if (enabled) enabled.checked = type.enabled !== false;
+  if (completionMessage) completionMessage.value = type.completionMessage || "";
+  if (acceptedMessage) acceptedMessage.value = type.acceptedMessage || "";
+  if (deniedMessage) deniedMessage.value = type.deniedMessage || "";
+
+  if (!questions) return;
+
+  questions.innerHTML = (type.questions || []).length
     ? type.questions.map((question, index) => `
         <div class="question-row" data-question-index="${index}">
           <label>
@@ -332,28 +421,44 @@ function saveEditorToState() {
   const type = selectedType();
   if (!type) return;
 
-  type.name = $("#selectedApplicationName").value.trim() || "Application";
-  type.description = $("#selectedApplicationDescription").value.trim() || "Start this application";
-  type.reviewerRoleId = $("#selectedApplicationReviewerRole").value;
-  type.approvalRoleId = $("#selectedApplicationAcceptedRole").value;
-  type.reviewChannelId = $("#selectedApplicationReviewChannel").value;
-  type.enabled = $("#selectedApplicationEnabled").checked;
-  type.completionMessage = $("#selectedApplicationCompletionMessage").value.trim();
-  type.acceptedMessage = $("#selectedApplicationAcceptedMessage").value.trim();
-  type.deniedMessage = $("#selectedApplicationDeniedMessage").value.trim();
+  const name = $("#selectedApplicationName");
+  const description = $("#selectedApplicationDescription");
+  const reviewerRole = $("#selectedApplicationReviewerRole");
+  const acceptedRole = $("#selectedApplicationAcceptedRole");
+  const reviewChannel = $("#selectedApplicationReviewChannel");
+  const enabled = $("#selectedApplicationEnabled");
+  const completionMessage = $("#selectedApplicationCompletionMessage");
+  const acceptedMessage = $("#selectedApplicationAcceptedMessage");
+  const deniedMessage = $("#selectedApplicationDeniedMessage");
+  const questionsContainer = $("#selectedApplicationQuestions");
 
-  type.questions = $$(".question-row", $("#selectedApplicationQuestions")).map((row, index) => ({
+  if (name) type.name = name.value.trim() || "Application";
+  if (description) type.description = description.value.trim() || "Start this application";
+  if (reviewerRole) type.reviewerRoleId = reviewerRole.value;
+  if (acceptedRole) type.approvalRoleId = acceptedRole.value;
+  if (reviewChannel) type.reviewChannelId = reviewChannel.value;
+  if (enabled) type.enabled = enabled.checked;
+  if (completionMessage) type.completionMessage = completionMessage.value.trim();
+  if (acceptedMessage) type.acceptedMessage = acceptedMessage.value.trim();
+  if (deniedMessage) type.deniedMessage = deniedMessage.value.trim();
+
+  if (!questionsContainer) return;
+
+  type.questions = $$(".question-row", questionsContainer).map((row, index) => ({
     id: type.questions?.[index]?.id || crypto.randomUUID(),
-    label: row.querySelector('[data-q-field="label"]').value.trim(),
-    maxLength: Number(row.querySelector('[data-q-field="maxLength"]').value || 1200),
-    required: row.querySelector('[data-q-field="required"]').checked
+    label: row.querySelector('[data-q-field="label"]')?.value.trim() || "Question",
+    maxLength: Number(row.querySelector('[data-q-field="maxLength"]')?.value || 1200),
+    required: row.querySelector('[data-q-field="required"]')?.checked !== false
   }));
 }
 
 function renderPanelChecklist() {
+  const panelApplicationChecklist = $("#panelApplicationChecklist");
   const types = state.settings?.applicationTypes || [];
 
-  $("#panelApplicationChecklist").innerHTML = types.length
+  if (!panelApplicationChecklist) return;
+
+  panelApplicationChecklist.innerHTML = types.length
     ? types.map(type => `
         <label class="panel-check">
           <input type="checkbox" data-panel-type="${escapeHtml(type.id)}" ${type.enabled !== false ? "checked" : ""} />
@@ -368,49 +473,69 @@ function renderPanelChecklist() {
 
 function fillPanelFields() {
   const settings = state.settings;
+  if (!settings) return;
 
-  $("#applicationPanelChannelId").innerHTML = channelOptions(
-    settings.applicationPanelChannelId,
-    "Choose panel channel"
-  );
+  const panelChannel = $("#applicationPanelChannelId");
+  const reviewChannel = $("#applicationReviewChannelId");
+  const reviewedChannel = $("#applicationReviewedChannelId");
+  const reviewerRole = $("#applicationReviewerRoleId");
+  const acceptedRole = $("#applicationAcceptedRoleId");
 
-  $("#applicationReviewChannelId").innerHTML = channelOptions(
-    settings.applicationReviewChannelId,
-    "Choose review channel"
-  );
+  if (panelChannel) {
+    panelChannel.innerHTML = channelOptions(
+      settings.applicationPanelChannelId,
+      "Choose panel channel"
+    );
+    panelChannel.value = settings.applicationPanelChannelId || "";
+  }
 
-  $("#applicationReviewedChannelId").innerHTML = channelOptions(
-    settings.applicationReviewedChannelId,
-    "No reviewed-results channel"
-  );
+  if (reviewChannel) {
+    reviewChannel.innerHTML = channelOptions(
+      settings.applicationReviewChannelId,
+      "Choose review channel"
+    );
+    reviewChannel.value = settings.applicationReviewChannelId || "";
+  }
 
-  $("#applicationReviewerRoleId").innerHTML = roleOptions(
-    settings.applicationReviewerRoleId,
-    "Choose reviewer role"
-  );
+  if (reviewedChannel) {
+    reviewedChannel.innerHTML = channelOptions(
+      settings.applicationReviewedChannelId,
+      "No reviewed-results channel"
+    );
+    reviewedChannel.value = settings.applicationReviewedChannelId || "";
+  }
 
-  $("#applicationAcceptedRoleId").innerHTML = roleOptions(
-    settings.applicationAcceptedRoleId,
-    "No global accepted role"
-  );
+  if (reviewerRole) {
+    reviewerRole.innerHTML = roleOptions(
+      settings.applicationReviewerRoleId,
+      "Choose reviewer role"
+    );
+    reviewerRole.value = settings.applicationReviewerRoleId || "";
+  }
 
-  [
-    "applicationPanelChannelId",
-    "applicationReviewChannelId",
-    "applicationReviewedChannelId",
-    "applicationReviewerRoleId",
-    "applicationAcceptedRoleId"
-  ].forEach(id => {
-    $("#" + id).value = settings[id] || "";
-  });
+  if (acceptedRole) {
+    acceptedRole.innerHTML = roleOptions(
+      settings.applicationAcceptedRoleId,
+      "No global accepted role"
+    );
+    acceptedRole.value = settings.applicationAcceptedRoleId || "";
+  }
 
-  $("#applicationPanelTitle").value = settings.applicationPanelTitle || "";
-  $("#applicationPanelDescription").value = settings.applicationPanelDescription || "";
-  $("#applicationPanelColor").value = settings.applicationPanelColor || "#2bd9fe";
-  $("#applicationPanelImageUrl").value = settings.applicationPanelImageUrl || "";
-  $("#applicationPanelPlaceholder").value = settings.applicationPanelPlaceholder || "Choose an application type";
-  $("#applicationPanelInteraction").value = settings.applicationPanelInteraction || "dropdown";
-  $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
+  const panelTitle = $("#applicationPanelTitle");
+  const panelDescription = $("#applicationPanelDescription");
+  const panelColor = $("#applicationPanelColor");
+  const panelImageUrl = $("#applicationPanelImageUrl");
+  const panelPlaceholder = $("#applicationPanelPlaceholder");
+  const panelInteraction = $("#applicationPanelInteraction");
+  const deleteOld = $("#applicationPanelDeleteOld");
+
+  if (panelTitle) panelTitle.value = settings.applicationPanelTitle || "";
+  if (panelDescription) panelDescription.value = settings.applicationPanelDescription || "";
+  if (panelColor) panelColor.value = settings.applicationPanelColor || "#2bd9fe";
+  if (panelImageUrl) panelImageUrl.value = settings.applicationPanelImageUrl || "";
+  if (panelPlaceholder) panelPlaceholder.value = settings.applicationPanelPlaceholder || "Choose an application type";
+  if (panelInteraction) panelInteraction.value = settings.applicationPanelInteraction || "dropdown";
+  if (deleteOld) deleteOld.checked = settings.applicationPanelDeleteOld !== false;
 
   renderPanelChecklist();
 }
@@ -439,7 +564,12 @@ async function completeOAuthHandoff() {
     throw new Error(`OAuth handoff failed (${response.status}): ${body}`);
   }
 
-  const result = JSON.parse(body);
+  let result;
+  try {
+    result = JSON.parse(body);
+  } catch {
+    throw new Error("OAuth handoff returned invalid JSON.");
+  }
 
   if (!result.session) {
     throw new Error("OAuth handoff returned no session.");
@@ -451,7 +581,7 @@ async function completeOAuthHandoff() {
   history.replaceState(
     null,
     "",
-    window.location.pathname
+    window.location.pathname + window.location.search
   );
 }
 
@@ -462,7 +592,7 @@ function collectSettings() {
     $$('[data-panel-type]:checked').map(input => input.dataset.panelType)
   );
 
-  const applicationTypes = (state.settings.applicationTypes || []).map(type => ({
+  const applicationTypes = (state.settings?.applicationTypes || []).map(type => ({
     ...type,
     enabled: enabledFromPanel.size
       ? enabledFromPanel.has(type.id)
@@ -472,18 +602,18 @@ function collectSettings() {
   return {
     ...state.settings,
     applicationTypes,
-    applicationPanelChannelId: $("#applicationPanelChannelId").value,
-    applicationReviewChannelId: $("#applicationReviewChannelId").value,
-    applicationReviewedChannelId: $("#applicationReviewedChannelId").value,
-    applicationReviewerRoleId: $("#applicationReviewerRoleId").value,
-    applicationAcceptedRoleId: $("#applicationAcceptedRoleId").value,
-    applicationPanelTitle: $("#applicationPanelTitle").value.trim(),
-    applicationPanelDescription: $("#applicationPanelDescription").value.trim(),
-    applicationPanelColor: $("#applicationPanelColor").value.trim(),
-    applicationPanelImageUrl: $("#applicationPanelImageUrl").value.trim(),
-    applicationPanelInteraction: $("#applicationPanelInteraction").value,
-    applicationPanelPlaceholder: $("#applicationPanelPlaceholder").value.trim(),
-    applicationPanelDeleteOld: $("#applicationPanelDeleteOld").checked
+    applicationPanelChannelId: $("#applicationPanelChannelId")?.value || "",
+    applicationReviewChannelId: $("#applicationReviewChannelId")?.value || "",
+    applicationReviewedChannelId: $("#applicationReviewedChannelId")?.value || "",
+    applicationReviewerRoleId: $("#applicationReviewerRoleId")?.value || "",
+    applicationAcceptedRoleId: $("#applicationAcceptedRoleId")?.value || "",
+    applicationPanelTitle: $("#applicationPanelTitle")?.value.trim() || "",
+    applicationPanelDescription: $("#applicationPanelDescription")?.value.trim() || "",
+    applicationPanelColor: $("#applicationPanelColor")?.value.trim() || "#2bd9fe",
+    applicationPanelImageUrl: $("#applicationPanelImageUrl")?.value.trim() || "",
+    applicationPanelInteraction: $("#applicationPanelInteraction")?.value || "dropdown",
+    applicationPanelPlaceholder: $("#applicationPanelPlaceholder")?.value.trim() || "Choose an application type",
+    applicationPanelDeleteOld: $("#applicationPanelDeleteOld")?.checked !== false
   };
 }
 
@@ -495,10 +625,16 @@ async function loadSection(section) {
       api("/api/applications?status=pending")
     ]);
 
-    $("#botStatus").textContent = status.online ? "Online" : "Offline";
-    $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`;
-    $("#memberCount").textContent = status.memberCount;
-    $("#applicationCount").textContent = applications.length;
+    const botStatus = $("#botStatus");
+    const botStatusDetail = $("#botStatusDetail");
+    const memberCount = $("#memberCount");
+    const applicationCount = $("#applicationCount");
+
+    if (botStatus) botStatus.textContent = status.online ? "Online" : "Offline";
+    if (botStatusDetail) botStatusDetail.textContent = `${status.guildName} · ${status.memberCount} members`;
+    if (memberCount) memberCount.textContent = status.memberCount;
+    if (applicationCount) applicationCount.textContent = applications.length;
+
     renderActivity(activity);
   }
 
@@ -520,12 +656,20 @@ async function loadSection(section) {
     }
 
     if (section === "welcome") {
-      $("#welcomeChannelId").innerHTML = channelOptions(
-        state.settings.welcomeChannelId,
-        "Choose welcome channel"
-      );
-      $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
-      $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
+      const welcomeChannel = $("#welcomeChannelId");
+      const welcomeImage = $("#welcomeImageUrl");
+
+      if (welcomeChannel) {
+        welcomeChannel.innerHTML = channelOptions(
+          state.settings.welcomeChannelId,
+          "Choose welcome channel"
+        );
+        welcomeChannel.value = state.settings.welcomeChannelId || "";
+      }
+
+      if (welcomeImage) {
+        welcomeImage.value = state.settings.welcomeImageUrl || "";
+      }
     }
   }
 }
@@ -535,29 +679,46 @@ async function loadUser() {
     await completeOAuthHandoff();
     state.user = await api("/api/me");
     updateConnection(true, state.user);
+
+    const authError = $("#authError");
+    if (authError) authError.remove();
+
     await loadSection(state.section);
   } catch (error) {
     console.error("Dashboard authentication failed:", error);
     updateConnection(false);
-
-    const loginButton = $("#loginButton");
-    if (loginButton) {
-      loginButton.title = error.message;
-    }
+    showAuthError(error);
   }
 }
 
-$$("[data-section]").forEach(button => {
-  button.addEventListener("click", () => showSection(button.dataset.section));
-});
+function bind(selector, eventName, handler) {
+  const element = typeof selector === "string"
+    ? document.querySelector(selector)
+    : selector;
 
-$$('[data-action="refresh"]').forEach(button => {
-  button.addEventListener("click", () => {
-    loadSection(state.section).catch(error => alert(error.message));
+  if (!element) {
+    console.warn(`Dashboard element not found: ${selector}`);
+    return;
+  }
+
+  element.addEventListener(eventName, handler);
+}
+
+function bindAll(selector, eventName, handler) {
+  document.querySelectorAll(selector).forEach(element => {
+    element.addEventListener(eventName, handler);
   });
+}
+
+bindAll("[data-section]", "click", event => {
+  showSection(event.currentTarget.dataset.section);
 });
 
-$("#loginButton").addEventListener("click", async () => {
+bindAll('[data-action="refresh"]', "click", () => {
+  loadSection(state.section).catch(error => alert(error.message));
+});
+
+bind("#loginButton", "click", async () => {
   if (!state.user) {
     window.location.assign(`${API}/auth/discord`);
     return;
@@ -570,7 +731,11 @@ $("#loginButton").addEventListener("click", async () => {
   updateConnection(false);
 });
 
-$("#addTypeTop").addEventListener("click", () => {
+bind("#addTypeTop", "click", () => {
+  if (!state.settings) return;
+
+  state.settings.applicationTypes = state.settings.applicationTypes || [];
+
   const type = {
     id: crypto.randomUUID(),
     name: "New application",
@@ -588,7 +753,7 @@ $("#addTypeTop").addEventListener("click", () => {
   renderApplicationEditor();
 });
 
-$("#applicationTypeList").addEventListener("click", event => {
+bind("#applicationTypeList", "click", event => {
   const item = event.target.closest("[data-type-id]");
   if (!item) return;
 
@@ -597,11 +762,12 @@ $("#applicationTypeList").addEventListener("click", event => {
   renderApplicationEditor();
 });
 
-$("#addQuestionTop").addEventListener("click", () => {
+bind("#addQuestionTop", "click", () => {
   const type = selectedType();
   if (!type) return;
 
   saveEditorToState();
+  type.questions = type.questions || [];
   type.questions.push({
     id: crypto.randomUUID(),
     label: "New question",
@@ -611,18 +777,22 @@ $("#addQuestionTop").addEventListener("click", () => {
   renderApplicationEditor();
 });
 
-$("#selectedApplicationQuestions").addEventListener("click", event => {
+bind("#selectedApplicationQuestions", "click", event => {
   const button = event.target.closest(".remove-question");
   if (!button) return;
 
   const type = selectedType();
+  if (!type) return;
+
   saveEditorToState();
   const row = button.closest(".question-row");
+  if (!row) return;
+
   type.questions.splice(Number(row.dataset.questionIndex), 1);
   renderApplicationEditor();
 });
 
-$("#saveApplications").addEventListener("click", async () => {
+bind("#saveApplications", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -639,7 +809,7 @@ $("#saveApplications").addEventListener("click", async () => {
   }
 });
 
-$("#saveSettings").addEventListener("click", async () => {
+bind("#saveSettings", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -653,7 +823,7 @@ $("#saveSettings").addEventListener("click", async () => {
   }
 });
 
-$("#publishPanel").addEventListener("click", async () => {
+bind("#publishPanel", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -669,14 +839,14 @@ $("#publishPanel").addEventListener("click", async () => {
   }
 });
 
-$("#saveWelcome").addEventListener("click", async () => {
+bind("#saveWelcome", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify({
         ...state.settings,
-        welcomeChannelId: $("#welcomeChannelId").value,
-        welcomeImageUrl: $("#welcomeImageUrl").value.trim()
+        welcomeChannelId: $("#welcomeChannelId")?.value || "",
+        welcomeImageUrl: $("#welcomeImageUrl")?.value.trim() || ""
       })
     });
 
@@ -686,7 +856,7 @@ $("#saveWelcome").addEventListener("click", async () => {
   }
 });
 
-$("#applicationsList").addEventListener("click", async event => {
+bind("#applicationsList", "click", async event => {
   const button = event.target.closest(".application-action");
   if (!button || !button.dataset.id) return;
 
