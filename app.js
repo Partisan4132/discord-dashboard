@@ -1,4 +1,5 @@
 const API = window.DASHBOARD_CONFIG.apiBaseUrl.replace(/\/$/, "");
+
 const state = {
   section: "overview",
   user: null,
@@ -61,10 +62,14 @@ function message(element, text, type = "") {
 }
 
 function updateConnection(connected, user = null) {
-  $("#connectionText").textContent = connected ? "Connected" : "Not connected";
+  $("#connectionText").textContent = connected
+    ? "Connected"
+    : "Not connected";
+
   $(".connection-dot").style.background = connected
     ? "#58d893"
     : "#f0a84b";
+
   $("#loginButton").textContent = connected
     ? "Log out"
     : "Log in with Discord";
@@ -97,7 +102,9 @@ function showSection(section) {
   $("#pageTitle").textContent = titles[section] || "Dashboard";
 
   if (state.user) {
-    loadSection(section).catch(error => console.error(error));
+    loadSection(section).catch(error => {
+      console.error("Section load failed:", error);
+    });
   }
 }
 
@@ -276,9 +283,22 @@ function renderApplicationEditor() {
   $("#applicationForm").classList.remove("hidden");
   $("#selectedApplicationName").value = type.name || "";
   $("#selectedApplicationDescription").value = type.description || "";
-  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(type.reviewerRoleId, "Choose reviewer role");
-  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role");
-  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel");
+
+  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(
+    type.reviewerRoleId,
+    "Choose reviewer role"
+  );
+
+  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(
+    type.approvalRoleId,
+    "No accepted role"
+  );
+
+  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(
+    type.reviewChannelId,
+    "Use panel review channel"
+  );
+
   $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || "";
   $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || "";
   $("#selectedApplicationReviewChannel").value = type.reviewChannelId || "";
@@ -349,11 +369,30 @@ function renderPanelChecklist() {
 function fillPanelFields() {
   const settings = state.settings;
 
-  $("#applicationPanelChannelId").innerHTML = channelOptions(settings.applicationPanelChannelId, "Choose panel channel");
-  $("#applicationReviewChannelId").innerHTML = channelOptions(settings.applicationReviewChannelId, "Choose review channel");
-  $("#applicationReviewedChannelId").innerHTML = channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel");
-  $("#applicationReviewerRoleId").innerHTML = roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role");
-  $("#applicationAcceptedRoleId").innerHTML = roleOptions(settings.applicationAcceptedRoleId, "No global accepted role");
+  $("#applicationPanelChannelId").innerHTML = channelOptions(
+    settings.applicationPanelChannelId,
+    "Choose panel channel"
+  );
+
+  $("#applicationReviewChannelId").innerHTML = channelOptions(
+    settings.applicationReviewChannelId,
+    "Choose review channel"
+  );
+
+  $("#applicationReviewedChannelId").innerHTML = channelOptions(
+    settings.applicationReviewedChannelId,
+    "No reviewed-results channel"
+  );
+
+  $("#applicationReviewerRoleId").innerHTML = roleOptions(
+    settings.applicationReviewerRoleId,
+    "Choose reviewer role"
+  );
+
+  $("#applicationAcceptedRoleId").innerHTML = roleOptions(
+    settings.applicationAcceptedRoleId,
+    "No global accepted role"
+  );
 
   [
     "applicationPanelChannelId",
@@ -376,33 +415,44 @@ function fillPanelFields() {
   renderPanelChecklist();
 }
 
-function completeOAuthHandoff() {
-  const hash = new URLSearchParams(
+async function completeOAuthHandoff() {
+  const hashParams = new URLSearchParams(
     window.location.hash.replace(/^#/, "")
   );
-  const token = hash.get("oauth");
+  const queryParams = new URLSearchParams(window.location.search);
+  const token = hashParams.get("oauth") || queryParams.get("oauth");
 
-  if (!token) return Promise.resolve();
+  if (!token) return;
 
-  return fetch(`${API}/auth/handoff`, {
+  const response = await fetch(`${API}/auth/handoff`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify({ token })
-  }).then(async response => {
-    if (!response.ok) {
-      throw new Error("OAuth handoff failed.");
-    }
-
-    const result = await response.json();
-    state.session = result.session;
-    localStorage.setItem("dashboard_session", result.session);
-    history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search
-    );
   });
+
+  const body = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`OAuth handoff failed (${response.status}): ${body}`);
+  }
+
+  const result = JSON.parse(body);
+
+  if (!result.session) {
+    throw new Error("OAuth handoff returned no session.");
+  }
+
+  state.session = result.session;
+  localStorage.setItem("dashboard_session", result.session);
+
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname
+  );
 }
 
 function collectSettings() {
@@ -470,7 +520,10 @@ async function loadSection(section) {
     }
 
     if (section === "welcome") {
-      $("#welcomeChannelId").innerHTML = channelOptions(state.settings.welcomeChannelId, "Choose welcome channel");
+      $("#welcomeChannelId").innerHTML = channelOptions(
+        state.settings.welcomeChannelId,
+        "Choose welcome channel"
+      );
       $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
       $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
     }
@@ -483,8 +536,14 @@ async function loadUser() {
     state.user = await api("/api/me");
     updateConnection(true, state.user);
     await loadSection(state.section);
-  } catch {
+  } catch (error) {
+    console.error("Dashboard authentication failed:", error);
     updateConnection(false);
+
+    const loginButton = $("#loginButton");
+    if (loginButton) {
+      loginButton.title = error.message;
+    }
   }
 }
 
