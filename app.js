@@ -174,8 +174,7 @@ function renderApplications(rows = []) {
                       ${index + 1}. ${escapeHtml(item.question || item.label || `Question ${index + 1}`)}
                     </div>
                     <div class="answer-value">
-                      ${escapeHtml(item.answer || "(no answer)").split(String.fromCharCode(10)).join("  
-")}
+                      ${escapeHtml(item.answer || "(no answer)").split(String.fromCharCode(10)).join(String.fromCharCode(60, 98, 114, 62))}
                     </div>
                   </div>
                 `).join("")
