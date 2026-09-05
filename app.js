@@ -1,23 +1,44 @@
 const API = window.DASHBOARD_CONFIG.apiBaseUrl.replace(/\/$/, "");
-const state = { section: "overview", user: null, settings: null, channels: { channels: [], roles: [] }, selectedTypeId: null };
+
+const state = {
+  section: "overview",
+  user: null,
+  settings: null,
+  channels: { channels: [], roles: [] },
+  selectedTypeId: null,
+  session: localStorage.getItem("dashboard_session") || ""
+};
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 async function api(path, options = {}) {
+  const { headers = {}, ...requestOptions } = options;
+
   const response = await fetch(`${API}${path}`, {
+    ...requestOptions,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options
+    headers: {
+      "Content-Type": "application/json",
+      ...(state.session
+        ? { Authorization: `Bearer ${state.session}` }
+        : {}),
+      ...headers
+    }
   });
 
   if (response.status === 401) {
     state.user = null;
+    state.session = "";
+    localStorage.removeItem("dashboard_session");
     updateConnection(false);
-    throw new Error("Log in with Discord first.");
+    throw new Error("Login required.");
   }
 
   if (!response.ok) {
-    throw new Error(await response.text() || `Request failed: ${response.status}`);
+    throw new Error(
+      (await response.text()) || `Request failed: ${response.status}`
+    );
   }
 
   return response.status === 204 ? null : response.json();
@@ -38,19 +59,67 @@ function formatDate(value) {
 }
 
 function message(element, text, type = "") {
+  if (!element) {
+    console.warn("Dashboard message element not found:", text);
+    return;
+  }
+
   element.textContent = text;
   element.className = `form-message ${type}`;
 }
 
 function updateConnection(connected, user = null) {
-  $("#connectionText").textContent = connected ? "Connected" : "Not connected";
-  $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b";
-  $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
+  const connectionText = $("#connectionText");
+  const connectionDot = $(".connection-dot");
+  const loginButton = $("#loginButton");
+
+  if (connectionText) {
+    connectionText.textContent = connected ? "Connected" : "Not connected";
+  }
+
+  if (connectionDot) {
+    connectionDot.style.background = connected ? "#58d893" : "#f0a84b";
+  }
+
+  if (loginButton) {
+    loginButton.textContent = connected
+      ? "Log out"
+      : "Log in with Discord";
+  }
 
   if (user) {
-    $("#serverName").textContent = user.guildName || "Connected server";
-    $("#sidebarServerName").textContent = user.guildName || "Connected server";
+    if ($("#serverName")) {
+      $("#serverName").textContent = user.guildName || "Connected server";
+    }
+
+    if ($("#sidebarServerName")) {
+      $("#sidebarServerName").textContent = user.guildName || "Connected server";
+    }
   }
+}
+
+function showAuthError(error) {
+  let element = $("#authError");
+
+  if (!element) {
+    element = document.createElement("div");
+    element.id = "authError";
+    element.className = "form-message error";
+    element.style.marginTop = "12px";
+
+    const loginButton = $("#loginButton");
+    if (loginButton?.parentElement) {
+      loginButton.parentElement.appendChild(element);
+    } else {
+      document.body.prepend(element);
+    }
+  }
+
+  message(
+    element,
+    error?.message || "Dashboard authentication failed.",
+    "error"
+  );
 }
 
 function showSection(section) {
@@ -72,15 +141,23 @@ function showSection(section) {
     welcome: "Welcome"
   };
 
-  $("#pageTitle").textContent = titles[section] || "Dashboard";
+  if ($("#pageTitle")) {
+    $("#pageTitle").textContent = titles[section] || "Dashboard";
+  }
 
   if (state.user) {
-    loadSection(section).catch(error => console.error(error));
+    loadSection(section).catch(error => {
+      console.error("Section load failed:", error);
+    });
   }
 }
 
 function renderActivity(items = []) {
-  $("#activityCount").textContent = items.length;
+  if ($("#activityCount")) {
+    $("#activityCount").textContent = items.length;
+  }
+
+  if (!$("#activityFeed")) return;
 
   $("#activityFeed").innerHTML = items.length
     ? items.slice(0, 12).map(item => `
@@ -97,10 +174,7 @@ function renderActivity(items = []) {
 
 function formatDuration(seconds) {
   const total = Number(seconds || 0);
-
-  if (!Number.isFinite(total) || total <= 0) {
-    return "—";
-  }
+  if (!Number.isFinite(total) || total <= 0) return "—";
 
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -147,6 +221,8 @@ function applicationStats(row) {
 }
 
 function renderApplications(rows = []) {
+  if (!$("#applicationsList")) return;
+
   const pending = rows.filter(row => row.status === "pending");
 
   $("#applicationsList").innerHTML = pending.length
@@ -154,7 +230,7 @@ function renderApplications(rows = []) {
         const stats = applicationStats(row);
         const answers = Array.isArray(row.answers) ? row.answers : [];
         const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
-        const displayUser = row.userMention || row.mention || `<@${escapeHtml(row.userId || "")}>`;
+        const displayUser = row.userMention || row.mention || `<@${row.userId || ""}>`;
 
         return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
           <div class="application-card-head">
@@ -205,7 +281,7 @@ function renderApplications(rows = []) {
     : '<div class="empty-state">There are no pending applications.</div>';
 }
 
-function options(items, selected, emptyLabel) {
+function options(items = [], selected, emptyLabel) {
   return `<option value="">${escapeHtml(emptyLabel)}</option>` +
     items.map(item => `
       <option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>
@@ -215,11 +291,11 @@ function options(items, selected, emptyLabel) {
 }
 
 function channelOptions(selected, emptyLabel) {
-  return options(state.channels.channels, selected, emptyLabel);
+  return options(state.channels.channels || [], selected, emptyLabel);
 }
 
 function roleOptions(selected, emptyLabel) {
-  return options(state.channels.roles, selected, emptyLabel);
+  return options(state.channels.roles || [], selected, emptyLabel);
 }
 
 function selectedType() {
@@ -230,7 +306,12 @@ function selectedType() {
 
 function renderApplicationList() {
   const types = state.settings?.applicationTypes || [];
-  $("#applicationTypeCount").textContent = types.length;
+
+  if ($("#applicationTypeCount")) {
+    $("#applicationTypeCount").textContent = types.length;
+  }
+
+  if (!$("#applicationTypeList")) return;
 
   $("#applicationTypeList").innerHTML = types.length
     ? types.map(type => `
@@ -249,37 +330,51 @@ function renderApplicationEditor() {
   const type = selectedType();
   renderApplicationList();
 
+  if (!$("#applicationForm")) return;
+
   if (!type) {
     $("#applicationForm").classList.add("hidden");
     return;
   }
 
   $("#applicationForm").classList.remove("hidden");
-  $("#selectedApplicationName").value = type.name || "";
-  $("#selectedApplicationDescription").value = type.description || "";
 
-  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(
-    type.reviewerRoleId,
-    "Choose reviewer role"
-  );
+  const fields = {
+    name: $("#selectedApplicationName"),
+    description: $("#selectedApplicationDescription"),
+    reviewerRole: $("#selectedApplicationReviewerRole"),
+    acceptedRole: $("#selectedApplicationAcceptedRole"),
+    reviewChannel: $("#selectedApplicationReviewChannel"),
+    enabled: $("#selectedApplicationEnabled"),
+    completion: $("#selectedApplicationCompletionMessage"),
+    accepted: $("#selectedApplicationAcceptedMessage"),
+    denied: $("#selectedApplicationDeniedMessage")
+  };
 
-  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(
-    type.approvalRoleId,
-    "No accepted role"
-  );
+  if (fields.name) fields.name.value = type.name || "";
+  if (fields.description) fields.description.value = type.description || "";
 
-  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(
-    type.reviewChannelId,
-    "Use panel review channel"
-  );
+  if (fields.reviewerRole) {
+    fields.reviewerRole.innerHTML = roleOptions(type.reviewerRoleId, "Choose reviewer role");
+    fields.reviewerRole.value = type.reviewerRoleId || "";
+  }
 
-  $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || "";
-  $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || "";
-  $("#selectedApplicationReviewChannel").value = type.reviewChannelId || "";
-  $("#selectedApplicationEnabled").checked = type.enabled !== false;
-  $("#selectedApplicationCompletionMessage").value = type.completionMessage || "";
-  $("#selectedApplicationAcceptedMessage").value = type.acceptedMessage || "";
-  $("#selectedApplicationDeniedMessage").value = type.deniedMessage || "";
+  if (fields.acceptedRole) {
+    fields.acceptedRole.innerHTML = roleOptions(type.approvalRoleId, "No accepted role");
+    fields.acceptedRole.value = type.approvalRoleId || "";
+  }
+
+  if (fields.reviewChannel) {
+    fields.reviewChannel.innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel");
+    fields.reviewChannel.value = type.reviewChannelId || "";
+  }
+
+  if (fields.enabled) fields.enabled.checked = type.enabled !== false;
+  if (fields.completion) fields.completion.value = type.completionMessage || "";
+  if (fields.accepted) fields.accepted.value = type.acceptedMessage || "";
+  if (fields.denied) fields.denied.value = type.deniedMessage || "";
+
+  if (!$("#selectedApplicationQuestions")) return;
 
   $("#selectedApplicationQuestions").innerHTML = (type.questions || []).length
     ? type.questions.map((question, index) => `
@@ -306,26 +401,32 @@ function saveEditorToState() {
   const type = selectedType();
   if (!type) return;
 
-  type.name = $("#selectedApplicationName").value.trim() || "Application";
-  type.description = $("#selectedApplicationDescription").value.trim() || "Start this application";
-  type.reviewerRoleId = $("#selectedApplicationReviewerRole").value;
-  type.approvalRoleId = $("#selectedApplicationAcceptedRole").value;
-  type.reviewChannelId = $("#selectedApplicationReviewChannel").value;
-  type.enabled = $("#selectedApplicationEnabled").checked;
-  type.completionMessage = $("#selectedApplicationCompletionMessage").value.trim();
-  type.acceptedMessage = $("#selectedApplicationAcceptedMessage").value.trim();
-  type.deniedMessage = $("#selectedApplicationDeniedMessage").value.trim();
+  const value = selector => $(selector)?.value || "";
+  const checked = selector => $(selector)?.checked !== false;
+
+  type.name = value("#selectedApplicationName").trim() || "Application";
+  type.description = value("#selectedApplicationDescription").trim() || "Start this application";
+  type.reviewerRoleId = value("#selectedApplicationReviewerRole");
+  type.approvalRoleId = value("#selectedApplicationAcceptedRole");
+  type.reviewChannelId = value("#selectedApplicationReviewChannel");
+  type.enabled = checked("#selectedApplicationEnabled");
+  type.completionMessage = value("#selectedApplicationCompletionMessage").trim();
+  type.acceptedMessage = value("#selectedApplicationAcceptedMessage").trim();
+  type.deniedMessage = value("#selectedApplicationDeniedMessage").trim();
+
+  if (!$("#selectedApplicationQuestions")) return;
 
   type.questions = $$(".question-row", $("#selectedApplicationQuestions")).map((row, index) => ({
     id: type.questions?.[index]?.id || crypto.randomUUID(),
-    label: row.querySelector('[data-q-field="label"]').value.trim(),
-    maxLength: Number(row.querySelector('[data-q-field="maxLength"]').value || 1200),
-    required: row.querySelector('[data-q-field="required"]').checked
+    label: row.querySelector('[data-q-field="label"]')?.value.trim() || "Question",
+    maxLength: Number(row.querySelector('[data-q-field="maxLength"]')?.value || 1200),
+    required: row.querySelector('[data-q-field="required"]')?.checked !== false
   }));
 }
 
 function renderPanelChecklist() {
   const types = state.settings?.applicationTypes || [];
+  if (!$("#panelApplicationChecklist")) return;
 
   $("#panelApplicationChecklist").innerHTML = types.length
     ? types.map(type => `
@@ -342,49 +443,40 @@ function renderPanelChecklist() {
 
 function fillPanelFields() {
   const settings = state.settings;
+  if (!settings) return;
 
-  $("#applicationPanelChannelId").innerHTML = channelOptions(
-    settings.applicationPanelChannelId,
-    "Choose panel channel"
-  );
+  const selectFields = {
+    applicationPanelChannelId: channelOptions(settings.applicationPanelChannelId, "Choose panel channel"),
+    applicationReviewChannelId: channelOptions(settings.applicationReviewChannelId, "Choose review channel"),
+    applicationReviewedChannelId: channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel"),
+    applicationReviewerRoleId: roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role"),
+    applicationAcceptedRoleId: roleOptions(settings.applicationAcceptedRoleId, "No global accepted role")
+  };
 
-  $("#applicationReviewChannelId").innerHTML = channelOptions(
-    settings.applicationReviewChannelId,
-    "Choose review channel"
-  );
-
-  $("#applicationReviewedChannelId").innerHTML = channelOptions(
-    settings.applicationReviewedChannelId,
-    "No reviewed-results channel"
-  );
-
-  $("#applicationReviewerRoleId").innerHTML = roleOptions(
-    settings.applicationReviewerRoleId,
-    "Choose reviewer role"
-  );
-
-  $("#applicationAcceptedRoleId").innerHTML = roleOptions(
-    settings.applicationAcceptedRoleId,
-    "No global accepted role"
-  );
-
-  [
-    "applicationPanelChannelId",
-    "applicationReviewChannelId",
-    "applicationReviewedChannelId",
-    "applicationReviewerRoleId",
-    "applicationAcceptedRoleId"
-  ].forEach(id => {
-    $("#" + id).value = settings[id] || "";
+  Object.entries(selectFields).forEach(([id, html]) => {
+    const element = $("#" + id);
+    if (element) {
+      element.innerHTML = html;
+      element.value = settings[id] || "";
+    }
   });
 
-  $("#applicationPanelTitle").value = settings.applicationPanelTitle || "";
-  $("#applicationPanelDescription").value = settings.applicationPanelDescription || "";
-  $("#applicationPanelColor").value = settings.applicationPanelColor || "#2bd9fe";
-  $("#applicationPanelImageUrl").value = settings.applicationPanelImageUrl || "";
-  $("#applicationPanelPlaceholder").value = settings.applicationPanelPlaceholder || "Choose an application type";
-  $("#applicationPanelInteraction").value = settings.applicationPanelInteraction || "dropdown";
-  $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
+  const values = {
+    applicationPanelTitle: settings.applicationPanelTitle || "",
+    applicationPanelDescription: settings.applicationPanelDescription || "",
+    applicationPanelColor: settings.applicationPanelColor || "#2bd9fe",
+    applicationPanelImageUrl: settings.applicationPanelImageUrl || "",
+    applicationPanelPlaceholder: settings.applicationPanelPlaceholder || "Choose an application type",
+    applicationPanelInteraction: settings.applicationPanelInteraction || "dropdown"
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    if ($("#" + id)) $("#" + id).value = value;
+  });
+
+  if ($("#applicationPanelDeleteOld")) {
+    $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
+  }
 
   renderPanelChecklist();
 }
@@ -396,28 +488,30 @@ function collectSettings() {
     $$('[data-panel-type]:checked').map(input => input.dataset.panelType)
   );
 
-  const applicationTypes = (state.settings.applicationTypes || []).map(type => ({
+  const applicationTypes = (state.settings?.applicationTypes || []).map(type => ({
     ...type,
     enabled: enabledFromPanel.size
       ? enabledFromPanel.has(type.id)
       : type.enabled !== false
   }));
 
+  const value = selector => $(selector)?.value || "";
+
   return {
     ...state.settings,
     applicationTypes,
-    applicationPanelChannelId: $("#applicationPanelChannelId").value,
-    applicationReviewChannelId: $("#applicationReviewChannelId").value,
-    applicationReviewedChannelId: $("#applicationReviewedChannelId").value,
-    applicationReviewerRoleId: $("#applicationReviewerRoleId").value,
-    applicationAcceptedRoleId: $("#applicationAcceptedRoleId").value,
-    applicationPanelTitle: $("#applicationPanelTitle").value.trim(),
-    applicationPanelDescription: $("#applicationPanelDescription").value.trim(),
-    applicationPanelColor: $("#applicationPanelColor").value.trim(),
-    applicationPanelImageUrl: $("#applicationPanelImageUrl").value.trim(),
-    applicationPanelInteraction: $("#applicationPanelInteraction").value,
-    applicationPanelPlaceholder: $("#applicationPanelPlaceholder").value.trim(),
-    applicationPanelDeleteOld: $("#applicationPanelDeleteOld").checked
+    applicationPanelChannelId: value("#applicationPanelChannelId"),
+    applicationReviewChannelId: value("#applicationReviewChannelId"),
+    applicationReviewedChannelId: value("#applicationReviewedChannelId"),
+    applicationReviewerRoleId: value("#applicationReviewerRoleId"),
+    applicationAcceptedRoleId: value("#applicationAcceptedRoleId"),
+    applicationPanelTitle: value("#applicationPanelTitle").trim(),
+    applicationPanelDescription: value("#applicationPanelDescription").trim(),
+    applicationPanelColor: value("#applicationPanelColor").trim(),
+    applicationPanelImageUrl: value("#applicationPanelImageUrl").trim(),
+    applicationPanelInteraction: value("#applicationPanelInteraction"),
+    applicationPanelPlaceholder: value("#applicationPanelPlaceholder").trim(),
+    applicationPanelDeleteOld: $("#applicationPanelDeleteOld")?.checked !== false
   };
 }
 
@@ -429,10 +523,10 @@ async function loadSection(section) {
       api("/api/applications?status=pending")
     ]);
 
-    $("#botStatus").textContent = status.online ? "Online" : "Offline";
-    $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`;
-    $("#memberCount").textContent = status.memberCount;
-    $("#applicationCount").textContent = applications.length;
+    if ($("#botStatus")) $("#botStatus").textContent = status.online ? "Online" : "Offline";
+    if ($("#botStatusDetail")) $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`;
+    if ($("#memberCount")) $("#memberCount").textContent = status.memberCount;
+    if ($("#applicationCount")) $("#applicationCount").textContent = applications.length;
     renderActivity(activity);
   }
 
@@ -440,62 +534,127 @@ async function loadSection(section) {
     renderApplications(await api("/api/applications?status=pending"));
   }
 
-  if (section === "applications" || section === "panels" || section === "welcome") {
+  if (["applications", "panels", "welcome"].includes(section)) {
     state.settings = await api("/api/settings");
     state.channels = await api("/api/channels");
     state.selectedTypeId = state.selectedTypeId || state.settings.applicationTypes?.[0]?.id || null;
 
-    if (section === "applications") {
-      renderApplicationEditor();
-    }
-
-    if (section === "panels") {
-      fillPanelFields();
-    }
+    if (section === "applications") renderApplicationEditor();
+    if (section === "panels") fillPanelFields();
 
     if (section === "welcome") {
-      $("#welcomeChannelId").innerHTML = channelOptions(
-        state.settings.welcomeChannelId,
-        "Choose welcome channel"
-      );
-      $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
-      $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
+      if ($("#welcomeChannelId")) {
+        $("#welcomeChannelId").innerHTML = channelOptions(state.settings.welcomeChannelId, "Choose welcome channel");
+        $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
+      }
+
+      if ($("#welcomeImageUrl")) {
+        $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
+      }
     }
   }
+}
+
+async function completeOAuthHandoff() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const queryParams = new URLSearchParams(window.location.search);
+  const token = hashParams.get("oauth") || queryParams.get("oauth");
+
+  if (!token) return;
+
+  const response = await fetch(`${API}/auth/handoff`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  });
+
+  const body = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`OAuth handoff failed (${response.status}): ${body}`);
+  }
+
+  let result;
+  try {
+    result = JSON.parse(body);
+  } catch {
+    throw new Error("OAuth handoff returned invalid JSON.");
+  }
+
+  if (!result.session) {
+    throw new Error("OAuth handoff returned no session.");
+  }
+
+  state.session = result.session;
+  localStorage.setItem("dashboard_session", result.session);
+
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname + window.location.search
+  );
 }
 
 async function loadUser() {
   try {
+    await completeOAuthHandoff();
     state.user = await api("/api/me");
     updateConnection(true, state.user);
+
+    if ($("#authError")) $("#authError").remove();
     await loadSection(state.section);
-  } catch {
+  } catch (error) {
+    console.error("Dashboard authentication failed:", error);
     updateConnection(false);
+    showAuthError(error);
   }
 }
 
-$$("[data-section]").forEach(button => {
-  button.addEventListener("click", () => showSection(button.dataset.section));
-});
+function bind(selector, eventName, handler) {
+  const element = typeof selector === "string"
+    ? document.querySelector(selector)
+    : selector;
 
-$$('[data-action="refresh"]').forEach(button => {
-  button.addEventListener("click", () => {
-    loadSection(state.section).catch(error => alert(error.message));
+  if (!element) {
+    console.warn(`Dashboard element not found: ${selector}`);
+    return;
+  }
+
+  element.addEventListener(eventName, handler);
+}
+
+function bindAll(selector, eventName, handler) {
+  document.querySelectorAll(selector).forEach(element => {
+    element.addEventListener(eventName, handler);
   });
+}
+
+bindAll("[data-section]", "click", event => {
+  showSection(event.currentTarget.dataset.section);
 });
 
-$("#loginButton").addEventListener("click", async () => {
+bindAll('[data-action="refresh"]', "click", () => {
+  loadSection(state.section).catch(error => alert(error.message));
+});
+
+bind("#loginButton", "click", async () => {
   if (!state.user) {
     window.location.assign(`${API}/auth/discord`);
     return;
   }
 
-  await api("/auth/logout", { method: "POST" });
+  await api("/auth/logout", { method: "POST" }).catch(() => {});
   state.user = null;
+  state.session = "";
+  localStorage.removeItem("dashboard_session");
   updateConnection(false);
 });
 
-$("#addTypeTop").addEventListener("click", () => {
+bind("#addTypeTop", "click", () => {
+  if (!state.settings) return;
+  state.settings.applicationTypes = state.settings.applicationTypes || [];
+
   const type = {
     id: crypto.randomUUID(),
     name: "New application",
@@ -513,7 +672,7 @@ $("#addTypeTop").addEventListener("click", () => {
   renderApplicationEditor();
 });
 
-$("#applicationTypeList").addEventListener("click", event => {
+bind("#applicationTypeList", "click", event => {
   const item = event.target.closest("[data-type-id]");
   if (!item) return;
 
@@ -522,11 +681,12 @@ $("#applicationTypeList").addEventListener("click", event => {
   renderApplicationEditor();
 });
 
-$("#addQuestionTop").addEventListener("click", () => {
+bind("#addQuestionTop", "click", () => {
   const type = selectedType();
   if (!type) return;
 
   saveEditorToState();
+  type.questions = type.questions || [];
   type.questions.push({
     id: crypto.randomUUID(),
     label: "New question",
@@ -536,18 +696,22 @@ $("#addQuestionTop").addEventListener("click", () => {
   renderApplicationEditor();
 });
 
-$("#selectedApplicationQuestions").addEventListener("click", event => {
+bind("#selectedApplicationQuestions", "click", event => {
   const button = event.target.closest(".remove-question");
   if (!button) return;
 
   const type = selectedType();
+  if (!type) return;
+
   saveEditorToState();
   const row = button.closest(".question-row");
+  if (!row) return;
+
   type.questions.splice(Number(row.dataset.questionIndex), 1);
   renderApplicationEditor();
 });
 
-$("#saveApplications").addEventListener("click", async () => {
+bind("#saveApplications", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -564,7 +728,7 @@ $("#saveApplications").addEventListener("click", async () => {
   }
 });
 
-$("#saveSettings").addEventListener("click", async () => {
+bind("#saveSettings", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -578,7 +742,7 @@ $("#saveSettings").addEventListener("click", async () => {
   }
 });
 
-$("#publishPanel").addEventListener("click", async () => {
+bind("#publishPanel", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
@@ -594,14 +758,14 @@ $("#publishPanel").addEventListener("click", async () => {
   }
 });
 
-$("#saveWelcome").addEventListener("click", async () => {
+bind("#saveWelcome", "click", async () => {
   try {
     state.settings = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify({
         ...state.settings,
-        welcomeChannelId: $("#welcomeChannelId").value,
-        welcomeImageUrl: $("#welcomeImageUrl").value.trim()
+        welcomeChannelId: $("#welcomeChannelId")?.value || "",
+        welcomeImageUrl: $("#welcomeImageUrl")?.value.trim() || ""
       })
     });
 
@@ -611,7 +775,7 @@ $("#saveWelcome").addEventListener("click", async () => {
   }
 });
 
-$("#applicationsList").addEventListener("click", async event => {
+bind("#applicationsList", "click", async event => {
   const button = event.target.closest(".application-action");
   if (!button || !button.dataset.id) return;
 
