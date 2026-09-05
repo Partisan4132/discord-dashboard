@@ -1,573 +1,634 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import crypto from "node:crypto";
-import { PermissionFlagsBits } from "discord.js";
-import { config } from "./config.js";
-import {
-  getApplication,
-  guildSettings,
-  listApplications,
-  listModeration,
-  saveGuildSettings
-} from "./store.js";
-import {
-  effectiveSettings,
-  isReviewer,
-  normalizeApplicationTypes,
-  reviewApplication
-} from "./applications.js";
-import { buildApplicationPanel } from "./panel.js";
+const API = window.DASHBOARD_CONFIG.apiBaseUrl.replace(/\/$/, "");
+const state = { section: "overview", user: null, settings: null, channels: { channels: [], roles: [] }, selectedTypeId: null };
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
-const app = express();
-const port = Number(process.env.API_PORT || 3001);
-const sessionSecret = process.env.DASHBOARD_SESSION_SECRET || "";
-const discordClientSecret = process.env.DISCORD_CLIENT_SECRET || "";
-const discordRedirectUri = process.env.DISCORD_REDIRECT_URI || "";
-
-const origins = (process.env.DASHBOARD_ORIGIN || "")
-  .split(",")
-  .map(value => value.trim().replace(/\/$/, ""))
-  .filter(Boolean);
-
-const oauthHandoffs = new Map();
-const oauthHandoffGracePeriodMs = 5 * 60 * 1000;
-
-app.use(express.json({ limit: "300kb" }));
-
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (origins.includes(origin)) return callback(null, true);
-      return callback(new Error("Origin not allowed"));
-    },
-    credentials: true
-  })
-);
-
-function base64url(value) {
-  return Buffer.from(value).toString("base64url");
-}
-
-function createSession(payload) {
-  if (!sessionSecret) {
-    throw new Error("DASHBOARD_SESSION_SECRET is not configured.");
-  }
-
-  const body = base64url(
-    JSON.stringify({
-      ...payload,
-      exp: Date.now() + 7 * 24 * 60 * 60 * 1000
-    })
-  );
-
-  const signature = crypto
-    .createHmac("sha256", sessionSecret)
-    .update(body)
-    .digest("base64url");
-
-  return `${body}.${signature}`;
-}
-
-function readSession(value) {
-  if (!value || !sessionSecret) return null;
-
-  const [body, signature] = String(value).split(".");
-  if (!body || !signature) return null;
-
-  const expected = crypto
-    .createHmac("sha256", sessionSecret)
-    .update(body)
-    .digest("base64url");
-
-  if (
-    expected.length !== signature.length ||
-    !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
-  ) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    return payload.exp > Date.now() ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function cookies(request) {
-  return Object.fromEntries(
-    String(request.headers.cookie || "")
-      .split(";")
-      .map(value => value.trim().split("="))
-      .filter(parts => parts.length >= 2)
-      .map(([key, ...rest]) => [key, decodeURIComponent(rest.join("="))])
-  );
-}
-
-function setCookie(response, name, value, maxAge = 60 * 60 * 24 * 7) {
-  response.setHeader(
-    "Set-Cookie",
-    `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=None`
-  );
-}
-
-function clearCookie(response, name) {
-  response.setHeader(
-    "Set-Cookie",
-    `${name}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None`
-  );
-}
-
-function createOAuthHandoff(session) {
-  const token = crypto.randomBytes(32).toString("hex");
-
-  oauthHandoffs.set(token, {
-    session,
-    expiresAt: Date.now() + oauthHandoffGracePeriodMs
+async function api(path, options = {}) {
+  const response = await fetch(`${API}${path}`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options
   });
 
-  return token;
-}
-
-function takeOAuthHandoff(token) {
-  const key = String(token || "");
-  const item = oauthHandoffs.get(key);
-
-  if (!item) return null;
-
-  if (item.expiresAt <= Date.now()) {
-    oauthHandoffs.delete(key);
-    return null;
+  if (response.status === 401) {
+    state.user = null;
+    updateConnection(false);
+    throw new Error("Log in with Discord first.");
   }
 
-  // Do not delete immediately. A browser, extension, or page reload can
-  // submit the same callback fragment more than once. Returning the same
-  // short-lived session makes the handoff safely idempotent.
-  return item.session;
+  if (!response.ok) {
+    throw new Error(await response.text() || `Request failed: ${response.status}`);
+  }
+
+  return response.status === 204 ? null : response.json();
 }
 
-function dashboardOrigin() {
-  return origins[0] || "http://localhost:8080";
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;"
+  })[character]);
 }
 
-function requireSession(request, response, next ) {
-  const authorization = String(request.headers.authorization || "");
-  const bearer = authorization.startsWith("Bearer ")
-    ? authorization.slice(7)
-    : "";
+function formatDate(value) {
+  return value ? new Date(value).toLocaleString() : "—";
+}
 
-  const session = readSession(
-    bearer || cookies(request).dashboard_session
+function message(element, text, type = "") {
+  element.textContent = text;
+  element.className = `form-message ${type}`;
+}
+
+function updateConnection(connected, user = null) {
+  $("#connectionText").textContent = connected ? "Connected" : "Not connected";
+  $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b";
+  $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
+
+  if (user) {
+    $("#serverName").textContent = user.guildName || "Connected server";
+    $("#sidebarServerName").textContent = user.guildName || "Connected server";
+  }
+}
+
+function showSection(section) {
+  state.section = section;
+
+  $$(".nav-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.section === section);
+  });
+
+  $$(".page-section").forEach(item => {
+    item.classList.toggle("active-section", item.id === section);
+  });
+
+  const titles = {
+    overview: "Overview",
+    applications: "Applications",
+    panels: "Panels",
+    pending: "Pending applications",
+    welcome: "Welcome"
+  };
+
+  $("#pageTitle").textContent = titles[section] || "Dashboard";
+
+  if (state.user) {
+    loadSection(section).catch(error => console.error(error));
+  }
+}
+
+function renderActivity(items = []) {
+  $("#activityCount").textContent = items.length;
+
+  $("#activityFeed").innerHTML = items.length
+    ? items.slice(0, 12).map(item => `
+        <div class="activity-row">
+          <div>
+            <strong>${escapeHtml(item.action || item.type || "Activity")}</strong>
+            <small>${escapeHtml(item.target || item.username || "Server event")}</small>
+          </div>
+          <small>${formatDate(item.at || item.createdAt)}</small>
+        </div>
+      `).join("")
+    : '<div class="empty-state">No activity recorded yet.</div>';
+}
+
+function formatDuration(seconds) {
+  const total = Number(seconds || 0);
+
+  if (!Number.isFinite(total) || total <= 0) {
+    return "—";
+  }
+
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = Math.floor(total % 60);
+
+  return [
+    hours ? `${hours}h` : "",
+    minutes ? `${minutes}m` : "",
+    secs ? `${secs}s` : ""
+  ].filter(Boolean).join(" ") || "0s";
+}
+
+function formatRelativeDate(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - date.getTime()) / 86400000)
   );
 
-  if (!session || session.guildId !== config.guildId) {
-    return response.status(401).json({ error: "Login required." });
-  }
+  if (!days) return "today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
 
-  request.dashboardSession = session;
-  next();
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? "" : "s"} ago`;
 }
 
-function guildFor(client) {
-  return client.guilds.cache.get(config.guildId) || null;
-}
-
-function validUrl(value) {
-  if (!value) return "";
-
-  try {
-    const url = new URL(String(value));
-    return ["http:", "https:"].includes(url.protocol ) ? url.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
-function cleanSettings(body) {
-  const input = body && typeof body === "object" ? body : {};
+function applicationStats(row) {
+  const stats = row.submissionStats || row.stats || {};
 
   return {
-    welcomeChannelId: String(input.welcomeChannelId || "").trim(),
-    welcomeImageUrl: validUrl(input.welcomeImageUrl),
-    applicationPanelChannelId: String(input.applicationPanelChannelId || "").trim(),
-    applicationPanelMessageId: String(input.applicationPanelMessageId || "").trim(),
-    applicationPanelTitle: String(input.applicationPanelTitle || "Applications")
-      .trim()
-      .slice(0, 256),
-    applicationPanelDescription: String(input.applicationPanelDescription || "")
-      .trim()
-      .slice(0, 4096),
-    applicationPanelColor: /^#?[0-9a-fA-F]{6}$/.test(
-      String(input.applicationPanelColor || "")
-    )
-      ? String(input.applicationPanelColor).startsWith("#")
-        ? String(input.applicationPanelColor)
-        : `#${input.applicationPanelColor}`
-      : "#2bd9fe",
-    applicationPanelImageUrl: validUrl(input.applicationPanelImageUrl),
-    applicationPanelPlaceholder: String(
-      input.applicationPanelPlaceholder || "Choose an application type"
-    )
-      .trim()
-      .slice(0, 150),
-    applicationPanelDeleteOld: input.applicationPanelDeleteOld !== false,
-    applicationReviewChannelId: String(input.applicationReviewChannelId || "").trim(),
-    applicationReviewedChannelId: String(input.applicationReviewedChannelId || "").trim(),
-    applicationReviewerRoleId: String(input.applicationReviewerRoleId || "").trim(),
-    applicationAcceptedRoleId: String(input.applicationAcceptedRoleId || "").trim(),
-    applicationTypes: normalizeApplicationTypes(input.applicationTypes)
+    duration: formatDuration(
+      row.durationSeconds ?? row.duration ?? stats.durationSeconds ?? stats.duration
+    ),
+    joined: formatRelativeDate(
+      row.joinedAt ?? row.guildJoinedAt ?? stats.joinedAt ?? stats.guildJoinedAt
+    ),
+    submitted: formatDate(row.submittedAt ?? row.createdAt)
   };
 }
 
-function activity(client) {
-  const moderation = listModeration(config.guildId).map(item => ({
-    ...item,
-    type: "moderation",
-    at: item.at
-  }));
+function renderApplications(rows = []) {
+  const pending = rows.filter(row => row.status === "pending");
 
-  const applications = listApplications(config.guildId).map(item => ({
-    action: `application_${item.status}`,
-    type: "application",
-    target: item.username || item.userId,
-    moderator: item.reviewerId || "—",
-    at: item.updatedAt || item.createdAt
-  }));
+  $("#applicationsList").innerHTML = pending.length
+    ? pending.map(row => {
+        const stats = applicationStats(row);
+        const answers = Array.isArray(row.answers) ? row.answers : [];
+        const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
+        const displayUser = row.userMention || row.mention || `<@${escapeHtml(row.userId || "")}>`;
 
-  return [...moderation, ...applications]
-    .sort((a, b) => String(b.at).localeCompare(String(a.at)))
-    .slice(0, 100);
+        return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
+          <div class="application-card-head">
+            <div>
+              <p class="eyebrow">${escapeHtml(row.typeName || row.typeId || "Application")} application submitted</p>
+              <h3>${escapeHtml(applicant)}'s “${escapeHtml(row.typeName || row.typeId || "Application")}” Application Submitted</h3>
+              <p class="application-user">User: ${escapeHtml(displayUser)}</p>
+            </div>
+            <span class="status">Pending</span>
+          </div>
+
+          <div class="answer-list">
+            ${answers.length
+              ? answers.map((item, index) => `
+                  <div class="answer-item">
+                    <div class="answer-question">
+                      ${index + 1}. ${escapeHtml(item.question || item.label || `Question ${index + 1}`)}
+                    </div>
+                    <div class="answer-value">
+                      ${escapeHtml(item.answer || "(no answer)").split(String.fromCharCode(10)).join(String.fromCharCode(60, 98, 114, 62))}
+                    </div>
+                  </div>
+                `).join("")
+              : '<div class="empty-state">No answers were recorded.</div>'}
+          </div>
+
+          <div class="submission-stats">
+            <p class="eyebrow">Submission stats</p>
+            <div class="stats-grid">
+              <div><span>User ID</span><strong>${escapeHtml(row.userId || "—")}</strong></div>
+              <div><span>Username</span><strong>${escapeHtml(applicant)}</strong></div>
+              <div><span>Duration</span><strong>${escapeHtml(stats.duration)}</strong></div>
+              <div><span>Joined guild</span><strong>${escapeHtml(stats.joined)}</strong></div>
+              <div><span>Submitted</span><strong>${escapeHtml(stats.submitted)}</strong></div>
+            </div>
+          </div>
+
+          <div class="application-actions">
+            <button class="primary application-action" data-id="${escapeHtml(row.id)}" data-decision="approved">
+              Accept application
+            </button>
+            <button class="danger application-action" data-id="${escapeHtml(row.id)}" data-decision="denied">
+              Deny application
+            </button>
+          </div>
+        </article>`;
+      }).join("")
+    : '<div class="empty-state">There are no pending applications.</div>';
 }
 
-export function registerDashboardRoutes(client) {
-  app.get("/api/health", (_request, response) => {
-    response.json({
-      ok: true,
-      service: "discord-dashboard-api",
-      botReady: client.isReady(),
-      time: new Date().toISOString()
-    });
-  });
+function options(items, selected, emptyLabel) {
+  return `<option value="">${escapeHtml(emptyLabel)}</option>` +
+    items.map(item => `
+      <option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>
+        ${escapeHtml(item.name)}
+      </option>
+    `).join("");
+}
 
-  app.get("/auth/discord", (_request, response) => {
-    if (!sessionSecret || !discordClientSecret || !discordRedirectUri) {
-      return response.status(503).send("Discord OAuth is not configured yet.");
-    }
+function channelOptions(selected, emptyLabel) {
+  return options(state.channels.channels, selected, emptyLabel);
+}
 
-    const state = crypto.randomBytes(24).toString("hex");
+function roleOptions(selected, emptyLabel) {
+  return options(state.channels.roles, selected, emptyLabel);
+}
 
-    response.setHeader(
-      "Set-Cookie",
-      `oauth_state=${state}; Max-Age=600; Path=/; HttpOnly; Secure; SameSite=Lax`
-    );
+function selectedType() {
+  return (state.settings?.applicationTypes || []).find(
+    type => type.id === state.selectedTypeId
+  ) || state.settings?.applicationTypes?.[0] || null;
+}
 
-    const params = new URLSearchParams({
-      client_id: config.clientId,
-      redirect_uri: discordRedirectUri,
-      response_type: "code",
-      scope: "identify guilds",
-      state
-    });
+function renderApplicationList() {
+  const types = state.settings?.applicationTypes || [];
+  $("#applicationTypeCount").textContent = types.length;
 
-    response.redirect(`https://discord.com/oauth2/authorize?${params}` );
-  });
+  $("#applicationTypeList").innerHTML = types.length
+    ? types.map(type => `
+        <button type="button" class="resource-item ${type.id === state.selectedTypeId ? "selected" : ""}" data-type-id="${escapeHtml(type.id)}">
+          <span class="resource-icon">${escapeHtml(type.emoji || "▤")}</span>
+          <span>
+            <strong>${escapeHtml(type.name)}</strong>
+            <small>${type.enabled !== false ? "Enabled" : "Disabled"} · ${(type.questions || []).length} questions</small>
+          </span>
+        </button>
+      `).join("")
+    : '<div class="empty-state">No applications yet.</div>';
+}
 
-  app.get("/auth/discord/callback", async (request, response) => {
-    try {
-      const storedState = cookies(request).oauth_state;
+function renderApplicationEditor() {
+  const type = selectedType();
+  renderApplicationList();
 
-      if (
-        !request.query.code ||
-        !request.query.state ||
-        !storedState ||
-        request.query.state !== storedState
-      ) {
-        return response.status(400).send("OAuth state or code is invalid.");
-      }
+  if (!type) {
+    $("#applicationForm").classList.add("hidden");
+    return;
+  }
 
-      const tokenResponse = await fetch(
-        "https://discord.com/api/v10/oauth2/token",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: config.clientId,
-            client_secret: discordClientSecret,
-            grant_type: "authorization_code",
-            code: String(request.query.code ),
-            redirect_uri: discordRedirectUri
-          })
-        }
-      );
+  $("#applicationForm").classList.remove("hidden");
+  $("#selectedApplicationName").value = type.name || "";
+  $("#selectedApplicationDescription").value = type.description || "";
 
-      if (!tokenResponse.ok) {
-        const details = await tokenResponse.text();
-        throw new Error(`Discord token exchange failed: ${details}`);
-      }
-
-      const token = await tokenResponse.json();
-      const discordHeaders = {
-        Authorization: `Bearer ${token.access_token}`
-      };
-
-      const [userResponse, guildsResponse] = await Promise.all([
-        fetch("https://discord.com/api/v10/users/@me", {
-          headers: discordHeaders
-        } ),
-        fetch("https://discord.com/api/v10/users/@me/guilds", {
-          headers: discordHeaders
-        } )
-      ]);
-
-      if (!userResponse.ok || !guildsResponse.ok) {
-        throw new Error("Discord identity lookup failed.");
-      }
-
-      const user = await userResponse.json();
-      const guilds = await guildsResponse.json();
-      const guild = guilds.find(item => item.id === config.guildId);
-      const ownerIds = String(process.env.OWNER_DISCORD_ID || "")
-        .split(",")
-        .map(value => value.trim())
-        .filter(Boolean);
-
-      const isAdmin = Boolean(
-        guild &&
-          ((BigInt(guild.permissions || "0") &
-            BigInt(PermissionFlagsBits.Administrator)) !==
-            0n ||
-            ownerIds.includes(user.id))
-      );
-
-      if (!isAdmin) {
-        return response
-          .status(403)
-          .send("You must be a server administrator to use this dashboard.");
-      }
-
-      const session = createSession({
-        userId: user.id,
-        username: user.username,
-        guildId: config.guildId
-      });
-
-      const handoff = createOAuthHandoff(session);
-
-      response.redirect(`${dashboardOrigin()}#oauth=${handoff}`);
-    } catch (error) {
-      console.error("Discord OAuth failed:", error);
-      response.status(500).send("Discord login failed. Check the API logs.");
-    }
-  });
-
-  app.post("/auth/handoff", (request, response) => {
-    const session = takeOAuthHandoff(request.body?.token);
-
-    if (!session) {
-      return response
-        .status(401)
-        .json({ error: "OAuth handoff expired or already used." });
-    }
-
-    response.json({ session });
-  });
-
-  app.post("/auth/logout", (_request, response) => {
-    clearCookie(response, "dashboard_session");
-    response.status(204).end();
-  });
-
-  app.get("/api/me", requireSession, (request, response) => {
-    const guild = guildFor(client);
-
-    response.json({
-      id: request.dashboardSession.userId,
-      username: request.dashboardSession.username,
-      guildId: config.guildId,
-      guildName: guild?.name || "Connected server"
-    });
-  });
-
-  app.get("/api/status", requireSession, (_request, response) => {
-    const guild = guildFor(client);
-
-    response.json({
-      online: client.isReady(),
-      guildName: guild?.name || "Unknown server",
-      guildId: config.guildId,
-      memberCount: guild?.memberCount || 0
-    });
-  });
-
-  app.get("/api/activity", requireSession, (_request, response) => {
-    response.json(activity(client));
-  });
-
-  app.get("/api/settings", requireSession, (_request, response) => {
-    response.json(effectiveSettings(guildSettings(config.guildId)));
-  });
-
-  app.put("/api/settings", requireSession, (request, response) => {
-    const saved = saveGuildSettings(
-      config.guildId,
-      cleanSettings(request.body)
-    );
-
-    response.json(effectiveSettings(saved));
-  });
-
-  app.get("/api/channels", requireSession, (_request, response) => {
-    const guild = guildFor(client);
-
-    if (!guild) {
-      return response
-        .status(503)
-        .json({ error: "Bot is not connected to the configured guild." });
-    }
-
-    response.json({
-      channels: [...guild.channels.cache.values()]
-        .filter(channel => channel.isTextBased() && !channel.isThread())
-        .map(channel => ({
-          id: channel.id,
-          name: channel.name,
-          type: channel.type
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-      roles: [...guild.roles.cache.values()]
-        .filter(role => !role.managed)
-        .map(role => ({
-          id: role.id,
-          name: role.name,
-          position: role.position
-        }))
-        .sort((a, b) => b.position - a.position)
-    });
-  });
-
-  app.get("/api/applications", requireSession, (request, response) => {
-    response.json(
-      listApplications(config.guildId, String(request.query.status || ""))
-    );
-  });
-
-  app.post(
-    "/api/applications/:id/:decision",
-    requireSession,
-    async (request, response) => {
-      try {
-        const guild = guildFor(client);
-        const application = getApplication(config.guildId, request.params.id);
-
-        if (!guild || !application) {
-          return response.status(404).json({ error: "Application not found." });
-        }
-
-        const settings = effectiveSettings(guildSettings(config.guildId));
-        const type = settings.applicationTypes.find(
-          item => item.id === application.typeId
-        );
-        const member = await guild.members.fetch(
-          request.dashboardSession.userId
-        );
-
-        if (!type || !(await isReviewer(member, settings, type))) {
-          return response
-            .status(403)
-            .json({ error: "You are not allowed to review applications." });
-        }
-
-        const decision = String(request.params.decision);
-
-        if (!["approved", "denied", "changes_requested"].includes(decision)) {
-          return response.status(400).json({
-            error: "Invalid review decision."
-          });
-        }
-
-        const result = await reviewApplication({
-          client,
-          guildId: config.guildId,
-          applicationId: application.id,
-          decision,
-          reviewerId: request.dashboardSession.userId
-        });
-
-        response.json(result);
-      } catch (error) {
-        console.error("Dashboard review failed:", error);
-        response
-          .status(500)
-          .json({ error: error.message || "Review failed." });
-      }
-    }
+  $("#selectedApplicationReviewerRole").innerHTML = roleOptions(
+    type.reviewerRoleId,
+    "Choose reviewer role"
   );
 
-  app.post("/api/panel/publish", requireSession, async (_request, response) => {
-    try {
-      const settings = effectiveSettings(guildSettings(config.guildId));
+  $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(
+    type.approvalRoleId,
+    "No accepted role"
+  );
 
-      if (!settings.applicationPanelChannelId) {
-        return response
-          .status(400)
-          .json({ error: "Choose a panel channel first." });
-      }
+  $("#selectedApplicationReviewChannel").innerHTML = channelOptions(
+    type.reviewChannelId,
+    "Use panel review channel"
+  );
 
-      const channel = await client.channels.fetch(
-        settings.applicationPanelChannelId
-      );
+  $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || "";
+  $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || "";
+  $("#selectedApplicationReviewChannel").value = type.reviewChannelId || "";
+  $("#selectedApplicationEnabled").checked = type.enabled !== false;
+  $("#selectedApplicationCompletionMessage").value = type.completionMessage || "";
+  $("#selectedApplicationAcceptedMessage").value = type.acceptedMessage || "";
+  $("#selectedApplicationDeniedMessage").value = type.deniedMessage || "";
 
-      if (!channel?.isTextBased()) {
-        return response
-          .status(400)
-          .json({ error: "The panel channel is not text-based." });
-      }
-
-      if (
-        settings.applicationPanelDeleteOld &&
-        settings.applicationPanelMessageId
-      ) {
-        const oldMessage = await channel.messages
-          .fetch(settings.applicationPanelMessageId)
-          .catch(() => null);
-        await oldMessage?.delete().catch(() => {});
-      }
-
-      const message = await channel.send(buildApplicationPanel(settings));
-      const saved = saveGuildSettings(config.guildId, {
-        applicationPanelMessageId: message.id
-      });
-
-      response.json({
-        ok: true,
-        messageId: message.id,
-        settings: effectiveSettings(saved)
-      });
-    } catch (error) {
-      console.error("Panel publish failed:", error);
-      response
-        .status(500)
-        .json({ error: error.message || "Panel publish failed." });
-    }
-  });
+  $("#selectedApplicationQuestions").innerHTML = (type.questions || []).length
+    ? type.questions.map((question, index) => `
+        <div class="question-row" data-question-index="${index}">
+          <label>
+            <span class="field-label">Question ${index + 1}</span>
+            <textarea data-q-field="label" maxlength="1000">${escapeHtml(question.label)}</textarea>
+          </label>
+          <label>
+            <span class="field-label">Max characters</span>
+            <input data-q-field="maxLength" type="number" min="20" max="2000" value="${Number(question.maxLength || 1200)}" />
+          </label>
+          <label class="check">
+            <input data-q-field="required" type="checkbox" ${question.required !== false ? "checked" : ""} />
+            Required
+            <button type="button" class="danger remove-question">Remove</button>
+          </label>
+        </div>
+      `).join("")
+    : '<div class="empty-state">No questions yet. Add your first question.</div>';
 }
 
-export function startDashboardApi(client) {
-  registerDashboardRoutes(client);
+function saveEditorToState() {
+  const type = selectedType();
+  if (!type) return;
 
-  return new Promise((resolve, reject) => {
-    const server = app.listen(port, "127.0.0.1", () => {
-      console.log(`Dashboard API listening on 127.0.0.1:${port}`);
-      resolve(server);
+  type.name = $("#selectedApplicationName").value.trim() || "Application";
+  type.description = $("#selectedApplicationDescription").value.trim() || "Start this application";
+  type.reviewerRoleId = $("#selectedApplicationReviewerRole").value;
+  type.approvalRoleId = $("#selectedApplicationAcceptedRole").value;
+  type.reviewChannelId = $("#selectedApplicationReviewChannel").value;
+  type.enabled = $("#selectedApplicationEnabled").checked;
+  type.completionMessage = $("#selectedApplicationCompletionMessage").value.trim();
+  type.acceptedMessage = $("#selectedApplicationAcceptedMessage").value.trim();
+  type.deniedMessage = $("#selectedApplicationDeniedMessage").value.trim();
+
+  type.questions = $$(".question-row", $("#selectedApplicationQuestions")).map((row, index) => ({
+    id: type.questions?.[index]?.id || crypto.randomUUID(),
+    label: row.querySelector('[data-q-field="label"]').value.trim(),
+    maxLength: Number(row.querySelector('[data-q-field="maxLength"]').value || 1200),
+    required: row.querySelector('[data-q-field="required"]').checked
+  }));
+}
+
+function renderPanelChecklist() {
+  const types = state.settings?.applicationTypes || [];
+
+  $("#panelApplicationChecklist").innerHTML = types.length
+    ? types.map(type => `
+        <label class="panel-check">
+          <input type="checkbox" data-panel-type="${escapeHtml(type.id)}" ${type.enabled !== false ? "checked" : ""} />
+          <span>
+            <strong>${escapeHtml(type.name)}</strong>
+            <small>${escapeHtml(type.description || "Application form")}</small>
+          </span>
+        </label>
+      `).join("")
+    : '<div class="empty-state">Create an application first.</div>';
+}
+
+function fillPanelFields() {
+  const settings = state.settings;
+
+  $("#applicationPanelChannelId").innerHTML = channelOptions(
+    settings.applicationPanelChannelId,
+    "Choose panel channel"
+  );
+
+  $("#applicationReviewChannelId").innerHTML = channelOptions(
+    settings.applicationReviewChannelId,
+    "Choose review channel"
+  );
+
+  $("#applicationReviewedChannelId").innerHTML = channelOptions(
+    settings.applicationReviewedChannelId,
+    "No reviewed-results channel"
+  );
+
+  $("#applicationReviewerRoleId").innerHTML = roleOptions(
+    settings.applicationReviewerRoleId,
+    "Choose reviewer role"
+  );
+
+  $("#applicationAcceptedRoleId").innerHTML = roleOptions(
+    settings.applicationAcceptedRoleId,
+    "No global accepted role"
+  );
+
+  [
+    "applicationPanelChannelId",
+    "applicationReviewChannelId",
+    "applicationReviewedChannelId",
+    "applicationReviewerRoleId",
+    "applicationAcceptedRoleId"
+  ].forEach(id => {
+    $("#" + id).value = settings[id] || "";
+  });
+
+  $("#applicationPanelTitle").value = settings.applicationPanelTitle || "";
+  $("#applicationPanelDescription").value = settings.applicationPanelDescription || "";
+  $("#applicationPanelColor").value = settings.applicationPanelColor || "#2bd9fe";
+  $("#applicationPanelImageUrl").value = settings.applicationPanelImageUrl || "";
+  $("#applicationPanelPlaceholder").value = settings.applicationPanelPlaceholder || "Choose an application type";
+  $("#applicationPanelInteraction").value = settings.applicationPanelInteraction || "dropdown";
+  $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
+
+  renderPanelChecklist();
+}
+
+function collectSettings() {
+  saveEditorToState();
+
+  const enabledFromPanel = new Set(
+    $$('[data-panel-type]:checked').map(input => input.dataset.panelType)
+  );
+
+  const applicationTypes = (state.settings.applicationTypes || []).map(type => ({
+    ...type,
+    enabled: enabledFromPanel.size
+      ? enabledFromPanel.has(type.id)
+      : type.enabled !== false
+  }));
+
+  return {
+    ...state.settings,
+    applicationTypes,
+    applicationPanelChannelId: $("#applicationPanelChannelId").value,
+    applicationReviewChannelId: $("#applicationReviewChannelId").value,
+    applicationReviewedChannelId: $("#applicationReviewedChannelId").value,
+    applicationReviewerRoleId: $("#applicationReviewerRoleId").value,
+    applicationAcceptedRoleId: $("#applicationAcceptedRoleId").value,
+    applicationPanelTitle: $("#applicationPanelTitle").value.trim(),
+    applicationPanelDescription: $("#applicationPanelDescription").value.trim(),
+    applicationPanelColor: $("#applicationPanelColor").value.trim(),
+    applicationPanelImageUrl: $("#applicationPanelImageUrl").value.trim(),
+    applicationPanelInteraction: $("#applicationPanelInteraction").value,
+    applicationPanelPlaceholder: $("#applicationPanelPlaceholder").value.trim(),
+    applicationPanelDeleteOld: $("#applicationPanelDeleteOld").checked
+  };
+}
+
+async function loadSection(section) {
+  if (section === "overview") {
+    const [status, activity, applications] = await Promise.all([
+      api("/api/status"),
+      api("/api/activity"),
+      api("/api/applications?status=pending")
+    ]);
+
+    $("#botStatus").textContent = status.online ? "Online" : "Offline";
+    $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`;
+    $("#memberCount").textContent = status.memberCount;
+    $("#applicationCount").textContent = applications.length;
+    renderActivity(activity);
+  }
+
+  if (section === "pending") {
+    renderApplications(await api("/api/applications?status=pending"));
+  }
+
+  if (section === "applications" || section === "panels" || section === "welcome") {
+    state.settings = await api("/api/settings");
+    state.channels = await api("/api/channels");
+    state.selectedTypeId = state.selectedTypeId || state.settings.applicationTypes?.[0]?.id || null;
+
+    if (section === "applications") {
+      renderApplicationEditor();
+    }
+
+    if (section === "panels") {
+      fillPanelFields();
+    }
+
+    if (section === "welcome") {
+      $("#welcomeChannelId").innerHTML = channelOptions(
+        state.settings.welcomeChannelId,
+        "Choose welcome channel"
+      );
+      $("#welcomeChannelId").value = state.settings.welcomeChannelId || "";
+      $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
+    }
+  }
+}
+
+async function loadUser() {
+  try {
+    state.user = await api("/api/me");
+    updateConnection(true, state.user);
+    await loadSection(state.section);
+  } catch {
+    updateConnection(false);
+  }
+}
+
+$$("[data-section]").forEach(button => {
+  button.addEventListener("click", () => showSection(button.dataset.section));
+});
+
+$$('[data-action="refresh"]').forEach(button => {
+  button.addEventListener("click", () => {
+    loadSection(state.section).catch(error => alert(error.message));
+  });
+});
+
+$("#loginButton").addEventListener("click", async () => {
+  if (!state.user) {
+    window.location.assign(`${API}/auth/discord`);
+    return;
+  }
+
+  await api("/auth/logout", { method: "POST" });
+  state.user = null;
+  updateConnection(false);
+});
+
+$("#addTypeTop").addEventListener("click", () => {
+  const type = {
+    id: crypto.randomUUID(),
+    name: "New application",
+    description: "Start this application",
+    emoji: "📋",
+    enabled: true,
+    reviewerRoleId: "",
+    approvalRoleId: "",
+    reviewChannelId: "",
+    questions: []
+  };
+
+  state.settings.applicationTypes.push(type);
+  state.selectedTypeId = type.id;
+  renderApplicationEditor();
+});
+
+$("#applicationTypeList").addEventListener("click", event => {
+  const item = event.target.closest("[data-type-id]");
+  if (!item) return;
+
+  saveEditorToState();
+  state.selectedTypeId = item.dataset.typeId;
+  renderApplicationEditor();
+});
+
+$("#addQuestionTop").addEventListener("click", () => {
+  const type = selectedType();
+  if (!type) return;
+
+  saveEditorToState();
+  type.questions.push({
+    id: crypto.randomUUID(),
+    label: "New question",
+    required: true,
+    maxLength: 1200
+  });
+  renderApplicationEditor();
+});
+
+$("#selectedApplicationQuestions").addEventListener("click", event => {
+  const button = event.target.closest(".remove-question");
+  if (!button) return;
+
+  const type = selectedType();
+  saveEditorToState();
+  const row = button.closest(".question-row");
+  type.questions.splice(Number(row.dataset.questionIndex), 1);
+  renderApplicationEditor();
+});
+
+$("#saveApplications").addEventListener("click", async () => {
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        ...collectSettings(),
+        applicationTypes: state.settings.applicationTypes
+      })
     });
 
-    server.once("error", reject);
-  });
-}
-
-app.use((error, _request, response, _next) => {
-  console.error("API error:", error.message);
-  response.status(500).json({ error: "API request failed" });
+    renderApplicationEditor();
+    message($("#applicationMessage"), "Application saved.", "success");
+  } catch (error) {
+    message($("#applicationMessage"), error.message, "error");
+  }
 });
+
+$("#saveSettings").addEventListener("click", async () => {
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(collectSettings())
+    });
+
+    fillPanelFields();
+    message($("#builderMessage"), "Panel saved.", "success");
+  } catch (error) {
+    message($("#builderMessage"), error.message, "error");
+  }
+});
+
+$("#publishPanel").addEventListener("click", async () => {
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(collectSettings())
+    });
+
+    const result = await api("/api/panel/publish", { method: "POST" });
+    state.settings = result.settings || state.settings;
+    fillPanelFields();
+    message($("#builderMessage"), "Panel sent to Discord.", "success");
+  } catch (error) {
+    message($("#builderMessage"), error.message, "error");
+  }
+});
+
+$("#saveWelcome").addEventListener("click", async () => {
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        ...state.settings,
+        welcomeChannelId: $("#welcomeChannelId").value,
+        welcomeImageUrl: $("#welcomeImageUrl").value.trim()
+      })
+    });
+
+    message($("#welcomeMessage"), "Welcome settings saved.", "success");
+  } catch (error) {
+    message($("#welcomeMessage"), error.message, "error");
+  }
+});
+
+$("#applicationsList").addEventListener("click", async event => {
+  const button = event.target.closest(".application-action");
+  if (!button || !button.dataset.id) return;
+
+  const action = button.dataset.decision === "approved" ? "accept" : "deny";
+  if (!window.confirm(`Are you sure you want to ${action} this application?`)) return;
+
+  button.disabled = true;
+
+  try {
+    await api(`/api/applications/${button.dataset.id}/${button.dataset.decision}`, {
+      method: "POST"
+    });
+    await loadSection("pending");
+  } catch (error) {
+    button.disabled = false;
+    alert(error.message);
+  }
+});
+
+loadUser();
