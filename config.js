@@ -1,3 +1,3 @@
 window.DASHBOARD_CONFIG = {
-  apiBaseUrl: "https://foster-jewelry-yeast-bring.trycloudflare.com"
+  apiBaseUrl: "https://yards-carefully-meal-atlas.trycloudflare.com"
 };
