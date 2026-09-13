@@ -96,7 +96,7 @@ function message(element, text, type = "") {
 }
 
 function updateConnection(connected, user = state.user) {
-  if $("#connectionText")) $("#connectionText").textContent = connected ? "Connected" : "Not connected";
+  if ($("#connectionText")) $("#connectionText").textContent = connected ? "Connected" : "Not connected";
   if ($(".connection-dot")) $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b";
   if ($("#loginButton")) $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
   if (user) {
