@@ -1,166 +1,180 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Discord Command Center</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="config.js"></script>
-    <script src="app.js" defer></script>
-  </head>
-  <body>
-    <div class="shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">DC</span>
-          <div><strong>Command Center</strong><small>Server operations</small></div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Discord Command Center</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="config.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">D</div>
+        <div>
+          <strong>Discord Command Center</strong>
+          <small>Server management</small>
         </div>
+      </div>
 
-        <div class="server-switcher">
-          <span class="server-avatar">S</span>
-          <div><small>CONFIGURING SERVER</small><strong id="sidebarServerName">Your server</strong></div>
-          <span class="chevron">⌄</span>
-        </div>
+      <div class="sidebar-server">
+        <span class="field-label">Current server</span>
+        <strong id="sidebarServerName">Not connected</strong>
+      </div>
 
-        <nav class="main-nav" aria-label="Main navigation">
-          <button class="nav-item active" data-section="overview"><span>⌂</span> Overview</button>
-          <button class="nav-item" data-section="applications"><span>▤</span> Applications</button>
-          <button class="nav-item" data-section="panels"><span>▣</span> Panels</button>
-          <button class="nav-item" data-section="pending"><span>◷</span> Pending applications</button>
-          <button class="nav-item" data-section="welcome"><span>✦</span> Welcome</button>
-        </nav>
+      <nav class="sidebar-nav" aria-label="Dashboard navigation">
+        <button class="nav-item active" type="button" data-section="overview">Overview</button>
+        <button class="nav-item" type="button" data-section="applications">Applications</button>
+        <button class="nav-item" type="button" data-section="panels">Panels</button>
+        <button class="nav-item" type="button" data-section="pending">Pending applications</button>
+        <button class="nav-item" type="button" data-section="welcome">Welcome</button>
+      </nav>
 
-        <div class="sidebar-label">SYSTEM</div>
-        <nav class="secondary-nav">
-          <button class="nav-item" data-section="overview"><span>⚙</span> Settings</button>
-        </nav>
-
-        <div class="sidebar-foot">
+      <div class="sidebar-footer">
+        <div class="connection-status">
           <span class="connection-dot"></span>
           <span id="connectionText">Not connected</span>
         </div>
-      </aside>
+        <button class="secondary full-width" id="loginButton" type="button">Log in with Discord</button>
+      </div>
+    </aside>
 
-      <main class="main">
-        <header class="topbar">
-          <div><p class="eyebrow">Server control center</p><h1 id="pageTitle">Overview</h1></div>
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1 id="pageTitle">Overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="server-pill" id="serverName">Not connected</span>
+          <button class="secondary" type="button" data-action="refresh">Refresh</button>
+        </div>
+      </header>
+
+      <div id="authError"></div>
+
+      <section class="page-section active-section" id="overview">
+        <div class="page-intro">
           <div>
-            <button id="loginButton" class="primary">Log in with Discord</button>
-            <div id="authError" class="form-message"></div>
+            <p class="eyebrow">Server overview</p>
+            <h2>Everything in one place</h2>
+            <p class="muted">Monitor your Discord bot and manage application workflows from the dashboard.</p>
           </div>
-        </header>
+        </div>
 
-        <section id="overview" class="page-section active-section">
-          <div class="hero">
-            <div>
-              <p class="eyebrow">Server overview</p>
-              <h2 id="serverName">Your server</h2>
-              <p>Build application forms, publish member panels, and review submissions from one workspace.</p>
-            </div>
-            <button class="secondary" data-action="refresh">Refresh data</button>
-          </div>
-          <div class="stats">
-            <article class="stat-card"><span>Bot status</span><strong id="botStatus">—</strong><small id="botStatusDetail">Checking connection</small></article>
-            <article class="stat-card"><span>Pending applications</span><strong id="applicationCount">—</strong><small>Waiting for review</small></article>
-            <article class="stat-card"><span>Members</span><strong id="memberCount">—</strong><small>Current server count</small></article>
-          </div>
-          <article class="card">
-            <div class="card-heading"><div><p class="eyebrow">Recent activity</p><h3>Server timeline</h3></div><span id="activityCount" class="pill">0</span></div>
-            <div id="activityFeed" class="activity-feed"><div class="empty-state">Log in to load activity.</div></div>
+        <div class="stat-grid">
+          <article class="stat-card"><span>Bot status</span><strong id="botStatus">Offline</strong><small id="botStatusDetail">Not connected</small></article>
+          <article class="stat-card"><span>Members</span><strong id="memberCount">0</strong><small>Current server members</small></article>
+          <article class="stat-card"><span>Pending applications</span><strong id="applicationCount">0</strong><small>Waiting for review</small></article>
+          <article class="stat-card"><span>Recent activity</span><strong id="activityCount">0</strong><small>Recorded events</small></article>
+        </div>
+
+        <article class="card">
+          <div class="card-header"><div><p class="eyebrow">Latest events</p><h2>Activity</h2></div></div>
+          <div id="activityFeed" class="activity-feed"><div class="empty-state">Log in to load activity.</div></div>
+        </article>
+      </section>
+
+      <section class="page-section" id="applications">
+        <div class="page-intro split-intro">
+          <div><p class="eyebrow">Application forms</p><h2>Configure applications</h2><p class="muted">Create reusable application types. Each panel can use any combination of these forms.</p></div>
+          <button class="primary" id="addTypeTop" type="button">+ Add application</button>
+        </div>
+
+        <div class="workspace-grid">
+          <article class="card resource-card">
+            <div class="card-header"><div><p class="eyebrow">Application types</p><h2>Forms <span class="count-badge" id="applicationTypeCount">0</span></h2></div></div>
+            <div id="applicationTypeList" class="resource-list"><div class="empty-state">No applications yet.</div></div>
           </article>
-        </section>
 
-        <section id="applications" class="page-section">
-          <div class="section-heading">
-            <div><p class="eyebrow">Application forms</p><h2>Applications</h2><p class="section-help">Create and edit the forms members complete in Discord DMs.</p></div>
-            <button type="button" id="addTypeTop" class="primary">＋ New application</button>
-          </div>
-          <div class="workspace-grid">
-            <aside class="resource-list card">
-              <div class="list-heading"><strong>Your applications</strong><span id="applicationTypeCount" class="pill">0</span></div>
-              <div id="applicationTypeList" class="resource-items"></div>
-            </aside>
-            <div class="editor-column">
-              <form id="applicationForm" class="stack">
-                <article class="card">
-                  <div class="card-heading"><div><p class="eyebrow">Application options</p><h3>Form details</h3></div><button type="button" id="saveApplications" class="primary">Save application</button></div>
-                  <div class="form-grid">
-                    <label>Application name<input id="selectedApplicationName" maxlength="100" placeholder="Moderator application" /></label>
-                    <label>Application description<input id="selectedApplicationDescription" maxlength="200" placeholder="Apply to join the staff team" /></label>
-                    <label>Reviewer role<select id="selectedApplicationReviewerRole"></select></label>
-                    <label>Accepted role<select id="selectedApplicationAcceptedRole"></select></label>
-                    <label>Review channel<select id="selectedApplicationReviewChannel"></select></label>
-                    <label class="check inline-check"><input id="selectedApplicationEnabled" type="checkbox" checked /> Enabled</label>
-                    <label class="wide">Completion message<textarea id="selectedApplicationCompletionMessage" maxlength="2000" placeholder="Your application has been submitted for review."></textarea></label>
-                    <label class="wide">Accepted message<textarea id="selectedApplicationAcceptedMessage" maxlength="2000" placeholder="Your application was accepted."></textarea></label>
-                    <label class="wide">Denied message<textarea id="selectedApplicationDeniedMessage" maxlength="2000" placeholder="Your application was denied."></textarea></label>
-                  </div>
-                  <p id="applicationMessage" class="form-message"></p>
-                </article>
-                <article class="card">
-                  <div class="card-heading"><div><p class="eyebrow">Questions</p><h3>Application questions</h3></div><button type="button" id="addQuestionTop" class="secondary">＋ Add question</button></div>
-                  <div id="selectedApplicationQuestions" class="questions"></div>
-                </article>
-              </form>
-            </div>
-          </div>
-        </section>
-
-        <section id="panels" class="page-section">
-          <div class="section-heading">
-            <div><p class="eyebrow">Discord member panel</p><h2>Panel builder</h2><p class="section-help">Choose where the application panel is sent and which application types members can start.</p></div>
-            <div class="button-row"><button type="button" id="saveSettings" class="secondary">Save panel</button><button type="button" id="publishPanel" class="primary">Publish to Discord</button></div>
-          </div>
-
-          <div class="stack">
-            <article class="card">
-              <div class="card-heading"><div><p class="eyebrow">Panel destination</p><h3>Channels and roles</h3></div></div>
-              <div class="form-grid">
-                <label>Panel channel<select id="applicationPanelChannelId"><option value="">Choose panel channel</option></select></label>
-                <label>Review channel<select id="applicationReviewChannelId"><option value="">Choose review channel</option></select></label>
-                <label>Reviewed applications channel<select id="applicationReviewedChannelId"><option value="">No reviewed-results channel</option></select></label>
-                <label>Reviewer role<select id="applicationReviewerRoleId"><option value="">Choose reviewer role</option></select></label>
-                <label class="check inline-check"><input id="applicationPanelDeleteOld" type="checkbox" checked /> Delete previous panel when publishing</label>
-              </div>
-            </article>
-
-            <article class="card">
-              <div class="card-heading"><div><p class="eyebrow">Panel appearance</p><h3>Message content</h3></div></div>
-              <div class="form-grid">
-                <label>Panel title<input id="applicationPanelTitle" maxlength="256" placeholder="Applications" /></label>
-                <label>Dropdown placeholder<input id="applicationPanelPlaceholder" maxlength="150" placeholder="Choose an application type" /></label>
-                <label class="wide">Panel description<textarea id="applicationPanelDescription" maxlength="4096" placeholder="Choose an application below to begin."></textarea></label>
-                <label>Panel color<input id="applicationPanelColor" value="#2bd9fe" placeholder="#2bd9fe" /></label>
-                <label>Panel image URL<input id="applicationPanelImageUrl" type="url" placeholder="https://example.com/panel.png" /></label>
-                <label>Interaction type<select id="applicationPanelInteraction"><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></select></label>
-              </div>
-            </article>
-
-            <article class="card">
-              <div class="card-heading"><div><p class="eyebrow">Available forms</p><h3>Application types shown in the panel</h3></div></div>
-              <div id="panelApplicationChecklist" class="stack"><div class="empty-state">Create an application first.</div></div>
-              <p id="builderMessage" class="form-message"></p>
-            </article>
-          </div>
-        </section>
-
-        <section id="pending" class="page-section">
-          <div class="section-heading"><div><p class="eyebrow">Staff review queue</p><h2>Pending applications</h2><p class="section-help">Review submitted applications, inspect answers, and accept or deny applicants.</p></div></div>
-          <div id="applicationsList" class="application-list"><div class="empty-state">Log in to load pending applications.</div></div>
-        </section>
-
-        <section id="welcome" class="page-section">
-          <div class="section-heading"><div><p class="eyebrow">Member onboarding</p><h2>Welcome settings</h2><p class="section-help">Choose the channel and image used when a member joins the server.</p></div></div>
-          <article class="card">
+          <article class="card" id="applicationForm">
+            <div class="card-header"><div><p class="eyebrow">Form editor</p><h2>Application settings</h2></div><button class="secondary" id="addQuestionTop" type="button">+ Add question</button></div>
             <div class="form-grid">
-              <label>Welcome channel<select id="welcomeChannelId"><option value="">Choose welcome channel</option></select></label>
-              <label>Welcome image URL<input id="welcomeImageUrl" type="url" placeholder="https://example.com/welcome.png" /></label>
+              <label><span class="field-label">Application name</span><input id="selectedApplicationName" type="text" maxlength="100" /></label>
+              <label><span class="field-label">Reviewer role</span><select id="selectedApplicationReviewerRole"></select></label>
+              <label class="wide"><span class="field-label">Description</span><textarea id="selectedApplicationDescription" rows="3"></textarea></label>
+              <label><span class="field-label">Accepted role</span><select id="selectedApplicationAcceptedRole"></select></label>
+              <label><span class="field-label">Review channel</span><select id="selectedApplicationReviewChannel"></select></label>
+              <label class="check wide"><input id="selectedApplicationEnabled" type="checkbox" checked /> Enabled</label>
+              <label class="wide"><span class="field-label">Completion message</span><textarea id="selectedApplicationCompletionMessage" rows="2"></textarea></label>
+              <label class="wide"><span class="field-label">Accepted message</span><textarea id="selectedApplicationAcceptedMessage" rows="2"></textarea></label>
+              <label class="wide"><span class="field-label">Denied message</span><textarea id="selectedApplicationDeniedMessage" rows="2"></textarea></label>
             </div>
-            <button type="button" id="saveWelcome" class="primary">Save welcome settings</button>
-            <p id="welcomeMessage" class="form-message"></p>
+            <div class="subsection"><div class="subsection-header"><h3>Questions</h3></div><div id="selectedApplicationQuestions" class="question-list"></div></div>
+            <div class="form-actions"><span id="applicationMessage" class="form-message"></span><button class="primary" id="saveApplications" type="button">Save application</button></div>
           </article>
-        </section>
-      </main>
-    </div>
-  </body>
+        </div>
+      </section>
+
+      <section class="page-section" id="panels">
+        <div class="page-intro split-intro">
+          <div><p class="eyebrow">Application panels</p><h2>Publish and manage panels</h2><p class="muted">The original panel remains available. Additional panels are independent and may reuse the same application types.</p></div>
+          <button class="primary" id="createExtraPanel" type="button">+ Create panel</button>
+        </div>
+
+        <article class="card primary-panel-card">
+          <div class="card-header"><div><p class="eyebrow">Existing panel</p><h2>Current panel builder</h2></div></div>
+          <div class="form-grid">
+            <label><span class="field-label">Panel channel</span><select id="applicationPanelChannelId"></select></label>
+            <label><span class="field-label">Review channel</span><select id="applicationReviewChannelId"></select></label>
+            <label><span class="field-label">Reviewed-results channel</span><select id="applicationReviewedChannelId"></select></label>
+            <label><span class="field-label">Reviewer role</span><select id="applicationReviewerRoleId"></select></label>
+            <label><span class="field-label">Panel title</span><input id="applicationPanelTitle" type="text" maxlength="256" /></label>
+            <label><span class="field-label">Dropdown placeholder</span><input id="applicationPanelPlaceholder" type="text" maxlength="150" /></label>
+            <label class="wide"><span class="field-label">Panel description</span><textarea id="applicationPanelDescription" rows="4"></textarea></label>
+            <label><span class="field-label">Panel color</span><input id="applicationPanelColor" type="text" placeholder="#2bd9fe" /></label>
+            <label><span class="field-label">Panel image URL</span><input id="applicationPanelImageUrl" type="url" /></label>
+            <label><span class="field-label">Interaction</span><select id="applicationPanelInteraction"><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></select></label>
+            <label class="check"><input id="applicationPanelDeleteOld" type="checkbox" checked /> Delete previous message when publishing</label>
+          </div>
+          <div class="subsection"><div class="subsection-header"><h3>Enabled application types</h3></div><div id="panelApplicationChecklist" class="checklist"></div></div>
+          <div class="form-actions"><span id="builderMessage" class="form-message"></span><button class="secondary" id="saveSettings" type="button">Save panel</button><button class="primary" id="publishPanel" type="button">Publish existing panel</button></div>
+        </article>
+
+        <div class="workspace-grid panels-workspace">
+          <article class="card resource-card">
+            <div class="card-header"><div><p class="eyebrow">Independent panels</p><h2>Additional panels</h2></div></div>
+            <div id="extraPanelsList" class="resource-list"><div class="empty-state">No additional panels yet.</div></div>
+          </article>
+
+          <article class="card hidden" id="extraPanelForm">
+            <div class="card-header"><div><p class="eyebrow">Panel editor</p><h2>Independent panel</h2></div></div>
+            <input id="extraPanelId" type="hidden" />
+            <div class="form-grid">
+              <label><span class="field-label">Panel name</span><input id="extraPanelName" type="text" maxlength="100" /></label>
+              <label><span class="field-label">Discord channel</span><select id="extraPanelChannelId"></select></label>
+              <label><span class="field-label">Message title</span><input id="extraPanelTitle" type="text" maxlength="256" /></label>
+              <label><span class="field-label">Dropdown placeholder</span><input id="extraPanelPlaceholder" type="text" maxlength="150" /></label>
+              <label class="wide"><span class="field-label">Description</span><textarea id="extraPanelDescription" rows="4"></textarea></label>
+              <label><span class="field-label">Color</span><input id="extraPanelColor" type="text" placeholder="#2bd9fe" /></label>
+              <label><span class="field-label">Image URL</span><input id="extraPanelImageUrl" type="url" /></label>
+              <label class="check wide"><input id="extraPanelDeleteOld" type="checkbox" checked /> Delete previous message when publishing</label>
+            </div>
+            <div class="subsection"><div class="subsection-header"><h3>Application types for this panel</h3></div><div id="extraPanelTypes" class="checklist"></div></div>
+            <div class="form-actions"><span id="extraPanelMessage" class="form-message"></span><button class="danger" id="deleteExtraPanel" type="button">Delete panel</button><button class="secondary" id="saveExtraPanel" type="button">Save panel</button><button class="primary" id="publishExtraPanel" type="button">Publish panel</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-section" id="pending">
+        <div class="page-intro"><div><p class="eyebrow">Review queue</p><h2>Pending applications</h2><p class="muted">Review submitted answers and accept or deny each application.</p></div></div>
+        <div id="applicationsList" class="application-list"><div class="empty-state">Log in to load applications.</div></div>
+      </section>
+
+      <section class="page-section" id="welcome">
+        <div class="page-intro"><div><p class="eyebrow">Member experience</p><h2>Welcome settings</h2><p class="muted">Choose where welcome messages are sent and optionally provide an image URL.</p></div></div>
+        <article class="card narrow-card">
+          <div class="form-grid">
+            <label><span class="field-label">Welcome channel</span><select id="welcomeChannelId"></select></label>
+            <label class="wide"><span class="field-label">Welcome image URL</span><input id="welcomeImageUrl" type="url" /></label>
+          </div>
+          <div class="form-actions"><span id="welcomeMessage" class="form-message"></span><button class="primary" id="saveWelcome" type="button">Save welcome settings</button></div>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
 </html>
+
