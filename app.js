@@ -53,7 +53,7 @@ async function api(path, options = {}) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>\"']/g, character => ({
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -190,10 +190,16 @@ async function switchServer(guildId) {
 }
 
 async function refreshDashboard() {
-  state.user = await api("/api/me");
-  updateConnection(true, state.user);
-  await loadServers();
-  await loadSection(state.section);
+  try {
+    state.user = await api("/api/me");
+    updateConnection(true, state.user);
+    await loadServers();
+    await loadSection(state.section);
+  } catch (error) {
+    console.error("Dashboard refresh failed:", error);
+    updateConnection(false);
+    showAuthError(error);
+  }
 }
 
 function showSection(section) {
@@ -229,7 +235,7 @@ function renderApplications(rows = []) {
         const answers = Array.isArray(row.answers) ? row.answers : [];
         const applicant = row.username || row.user?.username || row.userId || "Unknown applicant";
         return `<article class="application-card" data-application-id="${escapeHtml(row.id)}">
-          <div class="application-card-head"><div><p class="eyebrow">${escapeHtml(row.typeName || row.typeId || "Application")} application submitted</p><h3>${escapeHtml(applicant)}'s application</h3><p class="application-user">User: ${escapeHtml(row.userMention || row.mention || row.userId || "—")}</p></div><span class="status">Pending</span></div>
+          <div class="application-card-head"><div><p class="eyebrow">${escapeHtml(row.typeName || row.typeId || "Application")} application submitted</p><h3>${escapeHtml(applicant)}'s application</h3><p class="application-user">User: ${escapeHtml(row.userMention || row.mention || row.userId || "—")}</p></div><span class="status">${escapeHtml(row.status || "Pending")}</span></div>
           <div class="answer-list">${answers.length ? answers.map((item, index) => `<div class="answer-item"><div class="answer-question">${index + 1}. ${escapeHtml(item.question || item.label || `Question ${index + 1}`)}</div><div class="answer-value">${escapeHtml(item.answer || "(no answer)")}</div></div>`).join("") : '<div class="empty-state">No answers were recorded.</div>'}</div>
           <div class="submission-stats"><p class="eyebrow">Submission stats</p><div class="stats-grid"><div><span>User ID</span><strong>${escapeHtml(row.userId || "—")}</strong></div><div><span>Username</span><strong>${escapeHtml(applicant)}</strong></div><div><span>Duration</span><strong>${escapeHtml(formatDuration(row.durationSeconds ?? stats.durationSeconds))}</strong></div><div><span>Joined guild</span><strong>${escapeHtml(relativeDate(row.joinedAt ?? stats.joinedAt))}</strong></div><div><span>Submitted</span><strong>${escapeHtml(formatDate(row.submittedAt ?? row.createdAt))}</strong></div></div></div>
           <div class="application-actions"><button class="primary application-action" data-id="${escapeHtml(row.id)}" data-decision="approved">Accept application</button><button class="danger application-action" data-id="${escapeHtml(row.id)}" data-decision="denied">Deny application</button></div>
@@ -334,6 +340,7 @@ function renderAccess() {
   const permissions = access.permissions || {};
   $$('[data-permission-key]').forEach(input => { input.checked = permissions[input.dataset.permissionKey] === true; input.disabled = access.role !== "owner"; });
   if (access.role !== "owner") { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); }
+  else { $("#adminManagementCard")?.classList.remove("hidden"); $("#permissionsManagementCard")?.classList.remove("hidden"); }
 }
 
 async function loadAccess() {
