@@ -1,3 +1,3 @@
 window.DASHBOARD_CONFIG = {
-  apiBaseUrl: "https://record-abot.pages.dev"
+  apiBaseUrl: "https://yards-carefully-meal-atlas.trycloudflare.com"
 };
