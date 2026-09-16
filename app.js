@@ -52,7 +52,7 @@ async function api(path, options = {}) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "\"&quot;\"", "'": "&#039;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
   })[character]);
 }
 
@@ -63,16 +63,24 @@ function formatDate(value) {
 function decodeSessionJWT() {
   const session = localStorage.getItem("dashboard_session");
   if (!session) return null;
-  try {
-    const parts = session.split(".");
-    if (parts.length !== 3) return null;
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padding = base64.length % 4 === 0 ? "" : "=".repeat(4 - (base64.length % 4));
-    const payload = JSON.parse(atob(base64 + padding));
-    return payload;
-  } catch {
-    return null;
+  const parts = session.split(".");
+  if (parts.length === 3) {
+    try {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padding = base64.length % 4 === 0 ? "" : "=".repeat(4 - (base64.length % 4));
+      const payload = JSON.parse(atob(base64 + padding));
+      return payload;
+    } catch { return null; }
   }
+  if (parts.length === 2) {
+    try {
+      const base64 = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+      const padding = base64.length % 4 === 0 ? "" : "=".repeat(4 - (base64.length % 4));
+      const payload = JSON.parse(atob(base64 + padding));
+      return payload;
+    } catch { return null; }
+  }
+  return null;
 }
 
 function formatDuration(seconds) {
@@ -177,18 +185,14 @@ async function loadServers() {
     const hidden = new Set(state.hiddenGuildIds);
 
     state.servers = jwtGuilds.map(guild => {
-      const role = guild.role || "member";
-      const isOwner = role === "owner";
-      const isAdmin = isOwner || role === "admin";
-      const botInstalled = guild.botInstalled !== undefined ? guild.botInstalled : true;
       return {
         id: guild.id,
         name: guild.name || "Unknown Server",
         icon: guild.icon || null,
-        botInstalled,
-        inviteUrl: botInstalled ? null : (clientId ? `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=8` : null),
-        accessRole: isOwner ? "owner" : isAdmin ? "admin" : "member",
-        permissions: { serverSwitch: isOwner || isAdmin }
+        botInstalled: guild.botInstalled !== undefined ? guild.botInstalled : false,
+        inviteUrl: guild.botInstalled ? null : (clientId ? `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=8` : null),
+        accessRole: guild.accessRole || "member",
+        permissions: guild.permissions || {}
       };
     }).filter(server => server.permissions?.serverSwitch !== false || server.accessRole === "owner");
 
@@ -471,7 +475,7 @@ bind("#serverPickerButton", "click", () => toggleServerMenu());
 
 bind("#serverPickerMenu", "click", event => {
   const retryButton = event.target.closest("[data-retry-servers]");
-  if (retryButton) { event.preventDefault(); loadServers(); return; }
+  if (retryButton) { event.preventDefault(); state.serverError = null; loadServers(); return; }
   const hideButton = event.target.closest("[data-hide-server-id]");
   if (hideButton) {
     event.preventDefault();
