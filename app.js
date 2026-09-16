@@ -12,6 +12,7 @@ const state = {
   extraPanels: [],
   selectedExtraPanelId: null,
   access: null,
+  userId: "",
   hiddenGuildIds: JSON.parse(localStorage.getItem("dashboard_hidden_guilds") || "[]"),
   showHiddenServers: false
 };
@@ -192,6 +193,7 @@ async function switchServer(guildId) {
 async function refreshDashboard() {
   try {
     state.user = await api("/api/me");
+    state.userId = state.user?.id || state.user?.userId || "";
     updateConnection(true, state.user);
     await loadServers();
     await loadSection(state.section);
@@ -335,7 +337,13 @@ function readExtraPanelForm() {
 function renderAccess() {
   const access = state.access;
   if (!access) return;
+  const isOwner = state.userId === "1499890551997071431";
   if ($("#settingsRoleSummary")) $("#settingsRoleSummary").textContent = access.role === "owner" ? "Owner access" : "Administrator access";
+  if (!isOwner) {
+    $("#adminManagementCard")?.classList.add("hidden");
+    $("#permissionsManagementCard")?.classList.add("hidden");
+    return;
+  }
   if ($("#settingsAdminsList")) $("#settingsAdminsList").innerHTML = access.members?.length ? access.members.map(member => `<div class="admin-row"><div><strong>${escapeHtml(member.username)}</strong><small>${escapeHtml(member.role)} · ${escapeHtml(member.userId)}</small></div><button class="danger remove-admin" type="button" data-admin-id="${escapeHtml(member.id)}">Remove</button></div>`).join("") : '<div class="empty-state">No manually added dashboard members.</div>';
   const permissions = access.permissions || {};
   $$('[data-permission-key]').forEach(input => { input.checked = permissions[input.dataset.permissionKey] === true; input.disabled = access.role !== "owner"; });
@@ -398,6 +406,7 @@ async function loadUser() {
   try {
     await completeOAuthHandoff();
     state.user = await api("/api/me");
+    state.userId = state.user?.id || state.user?.userId || "";
     updateConnection(true, state.user);
     $("#authError")?.remove();
     await loadServers();
@@ -480,6 +489,7 @@ bind("#loginButton", "click", async () => {
   if (!state.user) return window.location.assign(`${API}/auth/discord`);
   await api("/auth/logout", { method: "POST" }).catch(() => {});
   state.user = null;
+  state.userId = "";
   state.session = "";
   state.guildId = "";
   localStorage.removeItem("dashboard_session");
