@@ -52,12 +52,27 @@ async function api(path, options = {}) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "\"&quot;\"", "'": "&#039;"
   })[character]);
 }
 
 function formatDate(value) {
   return value ? new Date(value).toLocaleString() : "—";
+}
+
+function decodeSessionJWT() {
+  const session = localStorage.getItem("dashboard_session");
+  if (!session) return null;
+  try {
+    const parts = session.split(".");
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padding = base64.length % 4 === 0 ? "" : "=".repeat(4 - (base64.length % 4));
+    const payload = JSON.parse(atob(base64 + padding));
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 function formatDuration(seconds) {
@@ -68,7 +83,6 @@ function formatDuration(seconds) {
   const secs = Math.floor(total % 60);
   return [hours && `${hours}h`, minutes && `${minutes}m`, secs && `${secs}s`].filter(Boolean).join(" ") || "0s";
 }
-
 function relativeDate(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -123,7 +137,7 @@ function renderServerPicker() {
   const visibleServers = state.servers.filter(server => state.showHiddenServers || !hidden.has(server.id));
   const serverMarkup = visibleServers.map(server => {
     const selected = server.id === state.guildId;
-    const action = server.botInstalled ? `data-server-id="${escapeHtml(server.id)}"` : `data-invite-url="${escapeHtml(server.inviteUrl || "")}"`;
+    const action = server.botInstalled ? ` data-server-id="${escapeHtml(server.id)}"` : ` data-invite-url="${escapeHtml(server.inviteUrl || "")}"`;
     const icon = server.icon ? `<img src="https://cdn.discordapp.com/icons/${escapeHtml(server.id)}/${escapeHtml(server.icon)}.png?size=64" alt="" />` : escapeHtml((server.name || "?").slice(0, 1).toUpperCase());
     return `<div class="server-option ${selected ? "selected" : ""}" ${action}>
       <span class="server-option-icon">${icon}</span>
@@ -154,6 +168,41 @@ async function loadServers() {
   state.serversLoading = true;
   state.serverError = null;
   renderServerPicker();
+
+  const payload = decodeSessionJWT();
+  const jwtGuilds = payload?.guilds || [];
+
+  if (jwtGuilds.length > 0 && jwtGuilds[0]?.id) {
+    const clientId = window.DASHBOARD_CONFIG?.discordClientId || "";
+    const hidden = new Set(state.hiddenGuildIds);
+
+    state.servers = jwtGuilds.map(guild => {
+      const role = guild.role || "member";
+      const isOwner = role === "owner";
+      const isAdmin = isOwner || role === "admin";
+      const botInstalled = guild.botInstalled !== undefined ? guild.botInstalled : true;
+      return {
+        id: guild.id,
+        name: guild.name || "Unknown Server",
+        icon: guild.icon || null,
+        botInstalled,
+        inviteUrl: botInstalled ? null : (clientId ? `https://discord.com/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=8` : null),
+        accessRole: isOwner ? "owner" : isAdmin ? "admin" : "member",
+        permissions: { serverSwitch: isOwner || isAdmin }
+      };
+    }).filter(server => server.permissions?.serverSwitch !== false || server.accessRole === "owner");
+
+    const available = state.servers.find(server => server.id === state.guildId && !hidden.has(server.id))
+      || state.servers.find(server => !hidden.has(server.id));
+    if (available && available.id !== state.guildId) {
+      state.guildId = available.id;
+      localStorage.setItem("dashboard_guild_id", state.guildId);
+    }
+    state.serversLoading = false;
+    renderServerPicker();
+    return;
+  }
+
   try {
     const result = await api("/api/servers");
     state.servers = (result.servers || []).filter(server => server.permissions?.serverSwitch !== false || server.accessRole === "owner");
