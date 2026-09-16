@@ -9,6 +9,8 @@ const state = {
   session: localStorage.getItem("dashboard_session") || "",
   guildId: localStorage.getItem("dashboard_guild_id") || "",
   servers: [],
+  serversLoading: false,
+  serverError: null,
   extraPanels: [],
   selectedExtraPanelId: null,
   access: null,
@@ -121,6 +123,18 @@ function renderServerPicker() {
   const menu = $("#serverPickerMenu");
   if (!menu) return;
 
+  if (state.serversLoading) {
+    menu.innerHTML = '<div class="empty-state">Loading servers…</div>';
+    $("#serverPickerButton")?.setAttribute("aria-expanded", "true");
+    return;
+  }
+
+  if (state.serverError) {
+    menu.innerHTML = `<div class="empty-state" style="color:var(--danger)">${escapeHtml(state.serverError)}<br><button type="button" class="primary" data-retry-servers style="margin-top:8px">Retry</button></div>`;
+    $("#serverPickerButton")?.setAttribute("aria-expanded", "true");
+    return;
+  }
+
   const hidden = new Set(state.hiddenGuildIds);
   const visibleServers = state.servers.filter(server => state.showHiddenServers || !hidden.has(server.id));
 
@@ -163,18 +177,28 @@ function toggleServerMenu(force) {
 }
 
 async function loadServers() {
-  const result = await api("/api/servers");
-  state.servers = (result.servers || []).filter(server => server.permissions?.serverSwitch !== false || server.accessRole === "owner");
-  const available = state.servers.find(server => server.id === state.guildId && server.botInstalled && !state.hiddenGuildIds.includes(server.id))
-    || state.servers.find(server => server.id === result.selectedGuildId && server.botInstalled && !state.hiddenGuildIds.includes(server.id))
-    || state.servers.find(server => server.botInstalled && !state.hiddenGuildIds.includes(server.id))
-    || state.servers.find(server => !state.hiddenGuildIds.includes(server.id));
-
-  if (available && available.id !== state.guildId) {
-    state.guildId = available.id;
-    localStorage.setItem("dashboard_guild_id", state.guildId);
-  }
+  state.serversLoading = true;
+  state.serverError = null;
   renderServerPicker();
+  try {
+    const result = await api("/api/servers");
+    state.servers = (result.servers || []).filter(server => server.permissions?.serverSwitch !== false || server.accessRole === "owner");
+    const available = state.servers.find(server => server.id === state.guildId && server.botInstalled && !state.hiddenGuildIds.includes(server.id))
+      || state.servers.find(server => server.id === result.selectedGuildId && server.botInstalled && !state.hiddenGuildIds.includes(server.id))
+      || state.servers.find(server => server.botInstalled && !state.hiddenGuildIds.includes(server.id))
+      || state.servers.find(server => !state.hiddenGuildIds.includes(server.id));
+
+    if (available && available.id !== state.guildId) {
+      state.guildId = available.id;
+      localStorage.setItem("dashboard_guild_id", state.guildId);
+    }
+    renderServerPicker();
+  } catch (error) {
+    state.serverError = error?.message || "Failed to load servers.";
+    renderServerPicker();
+  } finally {
+    state.serversLoading = false;
+  }
 }
 
 async function switchServer(guildId) {
@@ -186,6 +210,8 @@ async function switchServer(guildId) {
   }
   state.guildId = guildId;
   localStorage.setItem("dashboard_guild_id", guildId);
+  if ($("#sidebarServerName")) $("#sidebarServerName").textContent = server.name;
+  if ($("#serverName")) $("#serverName").textContent = server.name;
   toggleServerMenu(false);
   await refreshDashboard();
 }
@@ -195,11 +221,20 @@ async function refreshDashboard() {
     state.user = await api("/api/me");
     state.userId = state.user?.id || state.user?.userId || "";
     updateConnection(true, state.user);
+  } catch (error) {
+    console.error("Dashboard auth check failed:", error);
+    updateConnection(false);
+    showAuthError(error);
+    return;
+  }
+  try {
     await loadServers();
+  } catch (error) {
+    console.error("Failed to load servers during refresh:", error);
+  }
+  try {
     await loadSection(state.section);
   } catch (error) {
-    console.error("Dashboard refresh failed:", error);
-    updateConnection(false);
     showAuthError(error);
   }
 }
@@ -432,6 +467,13 @@ bindAll('[data-action="refresh"]', "click", () => refreshDashboard().catch(showA
 bind("#serverPickerButton", "click", () => toggleServerMenu());
 
 bind("#serverPickerMenu", "click", event => {
+  const retryButton = event.target.closest("[data-retry-servers]");
+  if (retryButton) {
+    event.preventDefault();
+    loadServers();
+    return;
+  }
+
   const hideButton = event.target.closest("[data-hide-server-id]");
   if (hideButton) {
     event.preventDefault();
@@ -443,6 +485,9 @@ bind("#serverPickerMenu", "click", event => {
       if (replacement) {
         state.guildId = replacement.id;
         localStorage.setItem("dashboard_guild_id", replacement.id);
+        const serverName = replacement.name;
+        if ($("#sidebarServerName")) $("#sidebarServerName").textContent = serverName;
+        if ($("#serverName")) $("#serverName").textContent = serverName;
       }
     }
     localStorage.setItem("dashboard_hidden_guilds", JSON.stringify(state.hiddenGuildIds));
