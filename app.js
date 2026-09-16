@@ -35,7 +35,6 @@ async function api(path, options = {}) {
     credentials: "include",
     headers: requestHeaders
   });
-
   if (response.status === 401) {
     state.user = null;
     state.session = "";
@@ -43,25 +42,17 @@ async function api(path, options = {}) {
     updateConnection(false);
     throw new Error("Login required.");
   }
-
   if (!response.ok) {
     let detail = await response.text();
-    try {
-      detail = JSON.parse(detail).error || detail;
-    } catch {}
+    try { detail = JSON.parse(detail).error || detail; } catch {}
     throw new Error(detail || `Request failed: ${response.status}`);
   }
-
   return response.status === 204 ? null : response.json();
 }
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#039;"
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
   })[character]);
 }
 
@@ -75,9 +66,7 @@ function formatDuration(seconds) {
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const secs = Math.floor(total % 60);
-  return [hours && `${hours}h`, minutes && `${minutes}m`, secs && `${secs}s`]
-    .filter(Boolean)
-    .join(" ") || "0s";
+  return [hours && `${hours}h`, minutes && `${minutes}m`, secs && `${secs}s`].filter(Boolean).join(" ") || "0s";
 }
 
 function relativeDate(value) {
@@ -122,31 +111,20 @@ function showAuthError(error) {
 function renderServerPicker() {
   const menu = $("#serverPickerMenu");
   if (!menu) return;
-
-  if (state.serversLoading) {
-    menu.innerHTML = '<div class="empty-state">Loading servers…</div>';
-    $("#serverPickerButton")?.setAttribute("aria-expanded", "true");
-    return;
-  }
-
-  if (state.serverError) {
+  const loadingIndicator = state.serversLoading
+    ? '<div class="empty-state" style="padding:10px 12px;color:var(--muted);font-size:11px;text-align:center">Loading servers…</div>'
+    : "";
+  if (state.serverError && !state.serversLoading) {
     menu.innerHTML = `<div class="empty-state" style="color:var(--danger)">${escapeHtml(state.serverError)}<br><button type="button" class="primary" data-retry-servers style="margin-top:8px">Retry</button></div>`;
     $("#serverPickerButton")?.setAttribute("aria-expanded", "true");
     return;
   }
-
   const hidden = new Set(state.hiddenGuildIds);
   const visibleServers = state.servers.filter(server => state.showHiddenServers || !hidden.has(server.id));
-
   const serverMarkup = visibleServers.map(server => {
     const selected = server.id === state.guildId;
-    const action = server.botInstalled
-      ? `data-server-id="${escapeHtml(server.id)}"`
-      : `data-invite-url="${escapeHtml(server.inviteUrl || "")}"`;
-    const icon = server.icon
-      ? `<img src="https://cdn.discordapp.com/icons/${escapeHtml(server.id )}/${escapeHtml(server.icon)}.png?size=64" alt="" />`
-      : escapeHtml((server.name || "?").slice(0, 1).toUpperCase());
-
+    const action = server.botInstalled ? `data-server-id="${escapeHtml(server.id)}"` : `data-invite-url="${escapeHtml(server.inviteUrl || "")}"`;
+    const icon = server.icon ? `<img src="https://cdn.discordapp.com/icons/${escapeHtml(server.id)}/${escapeHtml(server.icon)}.png?size=64" alt="" />` : escapeHtml((server.name || "?").slice(0, 1).toUpperCase());
     return `<div class="server-option ${selected ? "selected" : ""}" ${action}>
       <span class="server-option-icon">${icon}</span>
       <span class="server-option-copy">
@@ -154,17 +132,13 @@ function renderServerPicker() {
         <small>${server.botInstalled ? `${escapeHtml(server.accessRole || "admin")} · Installed` : "Bot not installed"}</small>
       </span>
       ${server.botInstalled ? "<span class=\"server-check\">✓</span>" : `<a class="server-invite" href="${escapeHtml(server.inviteUrl || "#")}" target="_blank" rel="noopener">Invite bot</a>`}
-      ${state.showHiddenServers && hidden.has(server.id)
-        ? `<button class="server-hide-button" type="button" data-unhide-server-id="${escapeHtml(server.id)}">Unhide</button>`
-        : `<button class="server-hide-button" type="button" data-hide-server-id="${escapeHtml(server.id)}">Hide</button>`}
+      ${state.showHiddenServers && hidden.has(server.id) ? `<button class="server-hide-button" type="button" data-unhide-server-id="${escapeHtml(server.id)}">Unhide</button>` : `<button class="server-hide-button" type="button" data-hide-server-id="${escapeHtml(server.id)}">Hide</button>`}
     </div>`;
   }).join("");
-
   const hiddenToggle = state.hiddenGuildIds.length
     ? `<button class="server-hidden-toggle" type="button" data-show-hidden="true">${state.showHiddenServers ? "Hide hidden servers" : `Show hidden servers (${state.hiddenGuildIds.length})`}</button>`
     : "";
-
-  menu.innerHTML = `${serverMarkup || '<div class="empty-state">No administrator-accessible servers found.</div>'}${hiddenToggle}`;
+  menu.innerHTML = `${loadingIndicator}${serverMarkup || '<div class="empty-state">No administrator-accessible servers found.</div>'}${hiddenToggle}`;
   $("#serverPickerButton")?.setAttribute("aria-expanded", menu.classList.contains("open") ? "true" : "false");
 }
 
@@ -187,7 +161,6 @@ async function loadServers() {
       || state.servers.find(server => server.id === result.selectedGuildId && server.botInstalled && !state.hiddenGuildIds.includes(server.id))
       || state.servers.find(server => server.botInstalled && !state.hiddenGuildIds.includes(server.id))
       || state.servers.find(server => !state.hiddenGuildIds.includes(server.id));
-
     if (available && available.id !== state.guildId) {
       state.guildId = available.id;
       localStorage.setItem("dashboard_guild_id", state.guildId);
@@ -227,30 +200,15 @@ async function refreshDashboard() {
     showAuthError(error);
     return;
   }
-  try {
-    await loadServers();
-  } catch (error) {
-    console.error("Failed to load servers during refresh:", error);
-  }
-  try {
-    await loadSection(state.section);
-  } catch (error) {
-    showAuthError(error);
-  }
+  try { await loadServers(); } catch (error) { console.error("Failed to load servers during refresh:", error); }
+  try { await loadSection(state.section); } catch (error) { showAuthError(error); }
 }
 
 function showSection(section) {
   state.section = section;
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.section === section));
   $$(".page-section").forEach(item => item.classList.toggle("active-section", item.id === section));
-  const titles = {
-    overview: "Overview",
-    applications: "Applications",
-    panels: "Panels",
-    pending: "Pending applications",
-    welcome: "Welcome",
-    settings: "Settings"
-  };
+  const titles = { overview: "Overview", applications: "Applications", panels: "Panels", pending: "Pending applications", welcome: "Welcome", settings: "Settings" };
   if ($("#pageTitle")) $("#pageTitle").textContent = titles[section] || "Dashboard";
   if (state.user) loadSection(section).catch(showAuthError);
 }
@@ -374,11 +332,7 @@ function renderAccess() {
   if (!access) return;
   const isOwner = state.userId === "1499890551997071431";
   if ($("#settingsRoleSummary")) $("#settingsRoleSummary").textContent = access.role === "owner" ? "Owner access" : "Administrator access";
-  if (!isOwner) {
-    $("#adminManagementCard")?.classList.add("hidden");
-    $("#permissionsManagementCard")?.classList.add("hidden");
-    return;
-  }
+  if (!isOwner) { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); return; }
   if ($("#settingsAdminsList")) $("#settingsAdminsList").innerHTML = access.members?.length ? access.members.map(member => `<div class="admin-row"><div><strong>${escapeHtml(member.username)}</strong><small>${escapeHtml(member.role)} · ${escapeHtml(member.userId)}</small></div><button class="danger remove-admin" type="button" data-admin-id="${escapeHtml(member.id)}">Remove</button></div>`).join("") : '<div class="empty-state">No manually added dashboard members.</div>';
   const permissions = access.permissions || {};
   $$('[data-permission-key]').forEach(input => { input.checked = permissions[input.dataset.permissionKey] === true; input.disabled = access.role !== "owner"; });
@@ -468,12 +422,7 @@ bind("#serverPickerButton", "click", () => toggleServerMenu());
 
 bind("#serverPickerMenu", "click", event => {
   const retryButton = event.target.closest("[data-retry-servers]");
-  if (retryButton) {
-    event.preventDefault();
-    loadServers();
-    return;
-  }
-
+  if (retryButton) { event.preventDefault(); loadServers(); return; }
   const hideButton = event.target.closest("[data-hide-server-id]");
   if (hideButton) {
     event.preventDefault();
@@ -485,43 +434,27 @@ bind("#serverPickerMenu", "click", event => {
       if (replacement) {
         state.guildId = replacement.id;
         localStorage.setItem("dashboard_guild_id", replacement.id);
-        const serverName = replacement.name;
-        if ($("#sidebarServerName")) $("#sidebarServerName").textContent = serverName;
-        if ($("#serverName")) $("#serverName").textContent = serverName;
+        if ($("#sidebarServerName")) $("#sidebarServerName").textContent = replacement.name;
+        if ($("#serverName")) $("#serverName").textContent = replacement.name;
       }
     }
     localStorage.setItem("dashboard_hidden_guilds", JSON.stringify(state.hiddenGuildIds));
     renderServerPicker();
     return;
   }
-
   const unhideButton = event.target.closest("[data-unhide-server-id]");
   if (unhideButton) {
     event.preventDefault();
     event.stopPropagation();
-    const guildId = unhideButton.dataset.unhideServerId;
-    state.hiddenGuildIds = state.hiddenGuildIds.filter(id => id !== guildId);
+    state.hiddenGuildIds = state.hiddenGuildIds.filter(id => id !== unhideButton.dataset.unhideServerId);
     localStorage.setItem("dashboard_hidden_guilds", JSON.stringify(state.hiddenGuildIds));
     renderServerPicker();
     return;
   }
-
   const hiddenToggle = event.target.closest("[data-show-hidden]");
-  if (hiddenToggle) {
-    event.preventDefault();
-    event.stopPropagation();
-    state.showHiddenServers = !state.showHiddenServers;
-    renderServerPicker();
-    return;
-  }
-
+  if (hiddenToggle) { event.preventDefault(); event.stopPropagation(); state.showHiddenServers = !state.showHiddenServers; renderServerPicker(); return; }
   const invite = event.target.closest("[data-invite-url]");
-  if (invite) {
-    event.preventDefault();
-    window.open(invite.dataset.inviteUrl, "_blank", "noopener");
-    return;
-  }
-
+  if (invite) { event.preventDefault(); window.open(invite.dataset.inviteUrl, "_blank", "noopener"); return; }
   const option = event.target.closest("[data-server-id]");
   if (option) switchServer(option.dataset.serverId).catch(showAuthError);
 });
@@ -583,9 +516,7 @@ bind("#saveApplications", "click", async () => {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...collectSettings(), applicationTypes: state.settings.applicationTypes }) });
     renderApplicationEditor();
     message($("#applicationMessage"), "Application saved.", "success");
-  } catch (error) {
-    message($("#applicationMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#applicationMessage"), error.message, "error"); }
 });
 
 bind("#saveSettings", "click", async () => {
@@ -593,9 +524,7 @@ bind("#saveSettings", "click", async () => {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) });
     fillPanelFields();
     message($("#builderMessage"), "Panel saved.", "success");
-  } catch (error) {
-    message($("#builderMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#builderMessage"), error.message, "error"); }
 });
 
 bind("#publishPanel", "click", async () => {
@@ -603,18 +532,14 @@ bind("#publishPanel", "click", async () => {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) });
     await api("/api/panel/publish", { method: "POST" });
     message($("#builderMessage"), "Panel sent to Discord.", "success");
-  } catch (error) {
-    message($("#builderMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#builderMessage"), error.message, "error"); }
 });
 
 bind("#saveWelcome", "click", async () => {
   try {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...state.settings, welcomeChannelId: $("#welcomeChannelId")?.value || "", welcomeImageUrl: $("#welcomeImageUrl")?.value.trim() || "" }) });
     message($("#welcomeMessage"), "Welcome settings saved.", "success");
-  } catch (error) {
-    message($("#welcomeMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#welcomeMessage"), error.message, "error"); }
 });
 
 bind("#applicationsList", "click", async event => {
@@ -623,9 +548,7 @@ bind("#applicationsList", "click", async event => {
   try {
     await api(`/api/applications/${button.dataset.id}/${button.dataset.decision}`, { method: "POST" });
     await loadSection("pending");
-  } catch (error) {
-    alert(error.message);
-  }
+  } catch (error) { alert(error.message); }
 });
 
 bind("#createExtraPanel", "click", async () => {
@@ -635,9 +558,7 @@ bind("#createExtraPanel", "click", async () => {
     state.selectedExtraPanelId = result.panel.id;
     renderExtraPanels();
     renderExtraPanelForm();
-  } catch (error) {
-    message($("#extraPanelMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
 });
 
 bind("#extraPanelsList", "click", event => {
@@ -656,9 +577,7 @@ bind("#saveExtraPanel", "click", async () => {
     renderExtraPanels();
     renderExtraPanelForm();
     message($("#extraPanelMessage"), "Panel saved.", "success");
-  } catch (error) {
-    message($("#extraPanelMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
 });
 
 bind("#publishExtraPanel", "click", async () => {
@@ -670,9 +589,7 @@ bind("#publishExtraPanel", "click", async () => {
     renderExtraPanels();
     renderExtraPanelForm();
     message($("#extraPanelMessage"), "Panel published to Discord.", "success");
-  } catch (error) {
-    message($("#extraPanelMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
 });
 
 bind("#deleteExtraPanel", "click", async () => {
@@ -683,9 +600,7 @@ bind("#deleteExtraPanel", "click", async () => {
     state.selectedExtraPanelId = state.extraPanels[0]?.id || null;
     renderExtraPanels();
     renderExtraPanelForm();
-  } catch (error) {
-    message($("#extraPanelMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
 });
 
 bind("#addSettingsAdmin", "click", async () => {
@@ -695,9 +610,7 @@ bind("#addSettingsAdmin", "click", async () => {
     if ($("#settingsAdminUsername")) $("#settingsAdminUsername").value = "";
     renderAccess();
     message($("#settingsMessage"), "Dashboard member added.", "success");
-  } catch (error) {
-    message($("#settingsMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
 });
 
 bind("#settingsAdminsList", "click", async event => {
@@ -708,9 +621,7 @@ bind("#settingsAdminsList", "click", async event => {
     state.access.members = result.members;
     renderAccess();
     message($("#settingsMessage"), "Dashboard member removed.", "success");
-  } catch (error) {
-    message($("#settingsMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
 });
 
 bind("#saveAdminPermissions", "click", async () => {
@@ -720,9 +631,7 @@ bind("#saveAdminPermissions", "click", async () => {
     state.access.permissions = result.permissions;
     renderAccess();
     message($("#settingsMessage"), "Permissions saved.", "success");
-  } catch (error) {
-    message($("#settingsMessage"), error.message, "error");
-  }
+  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
 });
 
 loadUser();
