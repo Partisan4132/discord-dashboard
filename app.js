@@ -601,7 +601,7 @@ bind("#applicationTypeList", "click", event => {
   renderApplicationEditor();
 });
 
-bind("#addQuestionTop", "click", () => {
+bind("#addQuestionBottom", "click", () => {
   const type = selectedType();
   if (!type) return;
   saveEditorToState();
@@ -625,6 +625,19 @@ bind("#saveApplications", "click", async () => {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...collectSettings(), applicationTypes: state.settings.applicationTypes }) });
     renderApplicationEditor();
     message($("#applicationMessage"), "Application saved.", "success");
+  } catch (error) { message($("#applicationMessage"), error.message, "error"); }
+});
+
+bind("#deleteApplication", "click", async () => {
+  const type = selectedType();
+  if (!type) return;
+  if (!confirm(`Delete "${type.name}"? This cannot be undone.`)) return;
+  try {
+    state.settings.applicationTypes = state.settings.applicationTypes.filter(t => t.id !== type.id);
+    state.selectedTypeId = state.settings.applicationTypes[0]?.id || null;
+    state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...collectSettings(), applicationTypes: state.settings.applicationTypes }) });
+    renderApplicationEditor();
+    message($("#applicationMessage"), "Application deleted.", "success");
   } catch (error) { message($("#applicationMessage"), error.message, "error"); }
 });
 
