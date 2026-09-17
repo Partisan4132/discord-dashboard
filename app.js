@@ -524,7 +524,7 @@ function bindAll(selector, eventName, handler) {
 }
 
 bindAll("[data-section]", "click", event => showSection(event.currentTarget.dataset.section));
-bindAll('[data-action="refresh"]', "click", () => refreshDashboard().catch(showAuthError));
+bindAll('[data-action="refresh"]', "click", () => location.reload());
 bind("#serverPickerButton", "click", () => toggleServerMenu());
 
 bind("#serverPickerMenu", "click", event => {
