@@ -16,7 +16,8 @@ const state = {
   access: null,
   userId: "",
   hiddenGuildIds: JSON.parse(localStorage.getItem("dashboard_hidden_guilds") || "[]"),
-  showHiddenServers: false
+  showHiddenServers: false,
+  serverAccess: {}
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -399,6 +400,58 @@ async function loadAccess() {
   renderAccess();
 }
 
+function loadServerAccess() {
+  const stored = localStorage.getItem("dashboard_server_access");
+  if (stored) {
+    try {
+      state.serverAccess = JSON.parse(stored);
+    } catch { state.serverAccess = {}; }
+  } else {
+    state.serverAccess = {};
+  }
+  renderServerAccess();
+}
+
+function renderServerAccess() {
+  const list = $("#serverAccessList");
+  if (!list) return;
+  const isOwner = state.userId === "1499890551997071431";
+  const servers = state.servers.filter(s => isOwner || s.accessRole === "owner");
+  list.innerHTML = servers.length ? servers.map(s => {
+    const access = state.serverAccess[s.id] || { adminCanView: true, adminCanEdit: true };
+    return `<div class="server-access-row">
+    <div class="server-name">${escapeHtml(s.name)}</div>
+    <div class="access-controls">
+      <label><input type="checkbox" data-server-id="${escapeHtml(s.id)}" data-access="adminView" ${access.adminCanView ? "checked" : ""} ${!isOwner ? "disabled" : ""} /> Admin view</label>
+      <label><input type="checkbox" data-server-id="${escapeHtml(s.id)}" data-access="adminEdit" ${access.adminCanEdit ? "checked" : ""} ${!isOwner ? "disabled" : ""} /> Admin edit</label>
+    </div>
+  </div>`;
+  }).join("") : '<div class="empty-state">No servers found.</div>';
+}
+
+function saveServerAccess() {
+  const items = $$("#serverAccessList input[type=checkbox]").map(input => ({
+    serverId: input.dataset.serverId,
+    access: input.dataset.access,
+    enabled: input.checked
+  }));
+  for (const item of items) {
+    const current = state.serverAccess[item.serverId] || { adminCanView: true, adminCanEdit: true };
+    if (item.access === "adminView") current.adminCanView = item.enabled;
+    if (item.access === "adminEdit") current.adminCanEdit = item.enabled;
+    state.serverAccess[item.serverId] = current;
+  }
+  localStorage.setItem("dashboard_server_access", JSON.stringify(state.serverAccess));
+  message($("#settingsMessage"), "Server access saved.", "success");
+}
+
+function resetServerAccess() {
+  state.serverAccess = {};
+  localStorage.removeItem("dashboard_server_access");
+  loadServerAccess();
+  message($("#settingsMessage"), "Server access reset to defaults.", "success");
+}
+
 async function loadSection(section) {
   if (section === "overview") {
     const [status, activity, applications] = await Promise.all([api("/api/status"), api("/api/activity"), api("/api/applications?status=pending")]);
@@ -427,7 +480,7 @@ async function loadSection(section) {
       if ($("#welcomeImageUrl")) $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
     }
   }
-  if (section === "settings") await loadAccess();
+  if (section === "settings") { await loadAccess(); await loadServerAccess(); }
 }
 
 async function completeOAuthHandoff() {
@@ -688,6 +741,15 @@ bind("#saveAdminPermissions", "click", async () => {
     renderAccess();
     message($("#settingsMessage"), "Permissions saved.", "success");
   } catch (error) { message($("#settingsMessage"), error.message, "error"); }
+});
+
+bind("#saveServerAccess", "click", async () => {
+  await saveServerAccess();
+});
+
+bind("#resetServerAccess", "click", async () => {
+  if (!confirm("Reset all server access to defaults?")) return;
+  await resetServerAccess();
 });
 
 loadUser();
