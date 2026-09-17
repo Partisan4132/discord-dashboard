@@ -160,7 +160,8 @@ function renderServerPicker() {
   const hiddenToggle = state.hiddenGuildIds.length
     ? `<button class="server-hidden-toggle" type="button" data-show-hidden="true">${state.showHiddenServers ? "Hide hidden servers" : `Show hidden servers (${state.hiddenGuildIds.length})`}</button>`
     : "";
-  menu.innerHTML = `${loadingIndicator}${serverMarkup || '<div class="empty-state">No administrator-accessible servers found.</div>'}${hiddenToggle}`;
+  const reauthButton = `<button class="server-hidden-toggle" type="button" data-reauth="true" style="margin-top:6px;font-size:10px;opacity:.7">Re-authenticate (refresh bot status)</button>`;
+  menu.innerHTML = `${loadingIndicator}${serverMarkup || '<div class="empty-state">No administrator-accessible servers found.</div>'}${hiddenToggle}${reauthButton}`;
   $("#serverPickerButton")?.setAttribute("aria-expanded", menu.classList.contains("open") ? "true" : "false");
 }
 
@@ -506,6 +507,8 @@ bind("#serverPickerMenu", "click", event => {
   }
   const hiddenToggle = event.target.closest("[data-show-hidden]");
   if (hiddenToggle) { event.preventDefault(); event.stopPropagation(); state.showHiddenServers = !state.showHiddenServers; renderServerPicker(); return; }
+  const reauth = event.target.closest("[data-reauth]");
+  if (reauth) { event.preventDefault(); event.stopPropagation(); window.location.assign(`${API}/auth/discord`); return; }
   const invite = event.target.closest("[data-invite-url]");
   if (invite) { event.preventDefault(); window.open(invite.dataset.inviteUrl, "_blank", "noopener"); return; }
   const option = event.target.closest("[data-server-id]");
