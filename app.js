@@ -310,6 +310,16 @@ function renderApplicationList() {
     : '<div class="empty-state">No applications yet.</div>';
 }
 
+function renderReviewerTags() {
+  const container = $("#selectedApplicationReviewerRoles .reviewer-tags");
+  if (!container) return;
+  const type = selectedType();
+  const selectedIds = type ? (type.reviewerRoleIds || []) : [];
+  container.innerHTML = selectedIds.length
+    ? selectedIds.map(id => { const role = (state.channels.roles || []).find(r => r.id === id); if (!role) return ''; return `<span class="reviewer-tag">${escapeHtml(role.name)}<button type="button" class="reviewer-tag-remove" data-role-id="${escapeHtml(role.id)}" title="Remove">×</button></span>`; }).join("")
+    : '<span class="reviewer-tag-placeholder">No reviewers selected</span>';
+}
+
 function renderApplicationEditor() {
   const type = selectedType();
   renderApplicationList();
@@ -322,7 +332,7 @@ function renderApplicationEditor() {
   set("selectedApplicationCompletionMessage", type.completionMessage);
   set("selectedApplicationAcceptedMessage", type.acceptedMessage);
   set("selectedApplicationDeniedMessage", type.deniedMessage);
-  if ($("#selectedApplicationReviewerRoles")) { $("#selectedApplicationReviewerRoles").innerHTML = (state.channels.roles || []).map(role => `<label class="check"><input type="checkbox" data-reviewer-role-id="${escapeHtml(role.id)}" ${(type.reviewerRoleIds || []).includes(role.id) ? "checked" : ""} /> ${escapeHtml(role.name)}</label>`).join("") || '<div class="empty-state">No roles available.</div>'; }
+  if ($("#selectedApplicationReviewerRoles")) { renderReviewerTags(); if ($("#reviewerRoleMenu")) { $("#reviewerRoleMenu").innerHTML = (state.channels.roles || []).map(role => `<label class="dropdown-option"><input type="checkbox" data-role-id="${escapeHtml(role.id)}" ${(type.reviewerRoleIds || []).includes(role.id) ? "checked" : ""} /> ${escapeHtml(role.name)}</label>`).join("") || '<div class="empty-state">No roles available.</div>'; } }
   if ($("#selectedApplicationAcceptedRole")) { $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role"); $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || ""; }
   if ($("#selectedApplicationReviewChannel")) { $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel"); $("#selectedApplicationReviewChannel").value = type.reviewChannelId || ""; }
   if ($("#selectedApplicationEnabled")) $("#selectedApplicationEnabled").checked = type.enabled !== false;
@@ -335,7 +345,6 @@ function saveEditorToState() {
   const value = id => $(`#${id}`)?.value || "";
   type.name = value("selectedApplicationName").trim() || "Application";
   type.description = value("selectedApplicationDescription").trim();
-  type.reviewerRoleIds = $$("#selectedApplicationReviewerRoles input[type=checkbox]:checked").map(input => input.dataset.reviewerRoleId);
   type.approvalRoleId = value("selectedApplicationAcceptedRole");
   type.reviewChannelId = value("selectedApplicationReviewChannel");
   type.enabled = $("#selectedApplicationEnabled")?.checked !== false;
@@ -609,6 +618,12 @@ bind("#addQuestionBottom", "click", () => {
   type.questions.push({ id: crypto.randomUUID(), label: "New question", required: true, maxLength: 1200 });
   renderApplicationEditor();
 });
+
+bind("#addReviewerRole", "click", event => { event.preventDefault(); event.stopPropagation(); const menu = $("#reviewerRoleMenu"); if (menu) menu.style.display = menu.style.display === "block" ? "none" : "block"; });
+
+bind("#reviewerRoleMenu", "click", event => { event.preventDefault(); event.stopPropagation(); const checkbox = event.target.closest("input[type=checkbox][data-role-id]"); if (!checkbox) return; const roleId = checkbox.dataset.roleId; const type = selectedType(); if (!type) return; const idx = type.reviewerRoleIds.indexOf(roleId); if (idx >= 0) { type.reviewerRoleIds.splice(idx, 1); checkbox.checked = false; } else { type.reviewerRoleIds.push(roleId); checkbox.checked = true; } renderReviewerTags(); });
+
+document.addEventListener("click", event => { const removeBtn = event.target.closest(".reviewer-tag-remove"); if (removeBtn) { event.stopPropagation(); const roleId = removeBtn.dataset.roleId; const type = selectedType(); if (!type) return; type.reviewerRoleIds = type.reviewerRoleIds.filter(id => id !== roleId); renderReviewerTags(); if ($("#reviewerRoleMenu")) $("#reviewerRoleMenu").style.display = "none"; return; } const menu = $("#reviewerRoleMenu"); if (menu) menu.style.display = "none"; });
 
 bind("#selectedApplicationQuestions", "click", event => {
   const button = event.target.closest(".remove-question");
