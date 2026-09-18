@@ -322,7 +322,7 @@ function renderApplicationEditor() {
   set("selectedApplicationCompletionMessage", type.completionMessage);
   set("selectedApplicationAcceptedMessage", type.acceptedMessage);
   set("selectedApplicationDeniedMessage", type.deniedMessage);
-  if ($("#selectedApplicationReviewerRole")) { $("#selectedApplicationReviewerRole").innerHTML = roleOptions(type.reviewerRoleId, "Choose reviewer role"); $("#selectedApplicationReviewerRole").value = type.reviewerRoleId || ""; }
+  if ($("#selectedApplicationReviewerRoles")) { $("#selectedApplicationReviewerRoles").innerHTML = (state.channels.roles || []).map(role => `<label class="check"><input type="checkbox" data-reviewer-role-id="${escapeHtml(role.id)}" ${(type.reviewerRoleIds || []).includes(role.id) ? "checked" : ""} /> ${escapeHtml(role.name)}</label>`).join("") || '<div class="empty-state">No roles available.</div>'; }
   if ($("#selectedApplicationAcceptedRole")) { $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role"); $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || ""; }
   if ($("#selectedApplicationReviewChannel")) { $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel"); $("#selectedApplicationReviewChannel").value = type.reviewChannelId || ""; }
   if ($("#selectedApplicationEnabled")) $("#selectedApplicationEnabled").checked = type.enabled !== false;
@@ -335,7 +335,7 @@ function saveEditorToState() {
   const value = id => $(`#${id}`)?.value || "";
   type.name = value("selectedApplicationName").trim() || "Application";
   type.description = value("selectedApplicationDescription").trim();
-  type.reviewerRoleId = value("selectedApplicationReviewerRole");
+  type.reviewerRoleIds = $$("#selectedApplicationReviewerRoles input[type=checkbox]:checked").map(input => input.dataset.reviewerRoleId);
   type.approvalRoleId = value("selectedApplicationAcceptedRole");
   type.reviewChannelId = value("selectedApplicationReviewChannel");
   type.enabled = $("#selectedApplicationEnabled")?.checked !== false;
@@ -587,7 +587,7 @@ bind("#loginButton", "click", async () => {
 bind("#addTypeTop", "click", () => {
   if (!state.settings) return;
   state.settings.applicationTypes ||= [];
-  const type = { id: crypto.randomUUID(), name: "New application", description: "Start this application", emoji: "📋", enabled: true, reviewerRoleId: "", approvalRoleId: "", reviewChannelId: "", questions: [] };
+  const type = { id: crypto.randomUUID(), name: "New application", description: "Start this application", emoji: "📋", enabled: true, reviewerRoleIds: [], approvalRoleId: "", reviewChannelId: "", questions: [] };
   state.settings.applicationTypes.push(type);
   state.selectedTypeId = type.id;
   renderApplicationEditor();
