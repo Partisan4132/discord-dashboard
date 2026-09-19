@@ -357,7 +357,7 @@ function saveEditorToState() {
 function fillPanelFields() {
   const settings = state.settings;
   if (!settings) return;
-  const fields = { applicationPanelChannelId: channelOptions(settings.applicationPanelChannelId, "Choose panel channel"), applicationReviewChannelId: channelOptions(settings.applicationReviewChannelId, "Choose review channel"), applicationReviewedChannelId: channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel"), applicationReviewerRoleId: roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role") };
+  const fields = { applicationPanelChannelId: channelOptions(settings.applicationPanelChannelId, "Choose panel channel"), applicationPendingChannelId: channelOptions(settings.applicationPendingChannelId, "Choose pending channel"), applicationReviewChannelId: channelOptions(settings.applicationReviewChannelId, "Choose review channel"), applicationReviewedChannelId: channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel"), applicationReviewerRoleId: roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role") };
   Object.entries(fields).forEach(([id, html]) => { if ($(`#${id}`)) { $(`#${id}`).innerHTML = html; $(`#${id}`).value = settings[id] || ""; } });
   ["applicationPanelTitle", "applicationPanelDescription", "applicationPanelColor", "applicationPanelImageUrl", "applicationPanelPlaceholder", "applicationPanelInteraction"].forEach(id => { if ($(`#${id}`)) $(`#${id}`).value = settings[id] || ""; });
   if ($("#applicationPanelDeleteOld")) $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
@@ -367,7 +367,7 @@ function fillPanelFields() {
 function collectSettings() {
   saveEditorToState();
   const enabled = new Set($$('[data-panel-type]:checked').map(input => input.dataset.panelType));
-  return { ...state.settings, applicationTypes: (state.settings.applicationTypes || []).map(type => ({ ...type, enabled: enabled.size ? enabled.has(type.id) : type.enabled !== false })), applicationPanelChannelId: $("#applicationPanelChannelId")?.value || "", applicationReviewChannelId: $("#applicationReviewChannelId")?.value || "", applicationReviewedChannelId: $("#applicationReviewedChannelId")?.value || "", applicationReviewerRoleId: $("#applicationReviewerRoleId")?.value || "", applicationPanelTitle: $("#applicationPanelTitle")?.value.trim() || "", applicationPanelDescription: $("#applicationPanelDescription")?.value.trim() || "", applicationPanelColor: $("#applicationPanelColor")?.value.trim() || "#2bd9fe", applicationPanelImageUrl: $("#applicationPanelImageUrl")?.value.trim() || "", applicationPanelPlaceholder: $("#applicationPanelPlaceholder")?.value.trim() || "Choose an application type", applicationPanelInteraction: $("#applicationPanelInteraction")?.value || "dropdown", applicationPanelDeleteOld: $("#applicationPanelDeleteOld")?.checked !== false };
+  return { ...state.settings, applicationTypes: (state.settings.applicationTypes || []).map(type => ({ ...type, enabled: enabled.size ? enabled.has(type.id) : type.enabled !== false })), applicationPanelChannelId: $("#applicationPanelChannelId")?.value || "", applicationPendingChannelId: $("#applicationPendingChannelId")?.value || "", applicationReviewChannelId: $("#applicationReviewChannelId")?.value || "", applicationReviewedChannelId: $("#applicationReviewedChannelId")?.value || "", applicationReviewerRoleId: $("#applicationReviewerRoleId")?.value || "", applicationPanelTitle: $("#applicationPanelTitle")?.value.trim() || "", applicationPanelDescription: $("#applicationPanelDescription")?.value.trim() || "", applicationPanelColor: $("#applicationPanelColor")?.value.trim() || "#2bd9fe", applicationPanelImageUrl: $("#applicationPanelImageUrl")?.value.trim() || "", applicationPanelPlaceholder: $("#applicationPanelPlaceholder")?.value.trim() || "Choose an application type", applicationPanelInteraction: $("#applicationPanelInteraction")?.value || "dropdown", applicationPanelDeleteOld: $("#applicationPanelDeleteOld")?.checked !== false };
 }
 
 function renderExtraPanels() {
@@ -396,12 +396,12 @@ function renderAccess() {
   if (!access) return;
   const isOwner = state.userId === "1499890551997071431";
   if ($("#settingsRoleSummary")) $("#settingsRoleSummary").textContent = access.role === "owner" ? "Owner access" : "Administrator access";
-  if (!isOwner) { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); return; }
+  if (!isOwner) { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); $("#serverAccessCard")?.classList.add("hidden"); return; }
   if ($("#settingsAdminsList")) $("#settingsAdminsList").innerHTML = access.members?.length ? access.members.map(member => `<div class="admin-row"><div><strong>${escapeHtml(member.username)}</strong><small>${escapeHtml(member.role)} · ${escapeHtml(member.userId)}</small></div><button class="danger remove-admin" type="button" data-admin-id="${escapeHtml(member.id)}">Remove</button></div>`).join("") : '<div class="empty-state">No manually added dashboard members.</div>';
   const permissions = access.permissions || {};
   $$('[data-permission-key]').forEach(input => { input.checked = permissions[input.dataset.permissionKey] === true; input.disabled = access.role !== "owner"; });
-  if (access.role !== "owner") { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); }
-  else { $("#adminManagementCard")?.classList.remove("hidden"); $("#permissionsManagementCard")?.classList.remove("hidden"); }
+  if (access.role !== "owner") { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); $("#serverAccessCard")?.classList.add("hidden"); }
+  else { $("#adminManagementCard")?.classList.remove("hidden"); $("#permissionsManagementCard")?.classList.remove("hidden"); $("#serverAccessCard")?.classList.remove("hidden"); }
 }
 
 async function loadAccess() {
