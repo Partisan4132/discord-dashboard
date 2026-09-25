@@ -619,11 +619,11 @@ bind("#addQuestionBottom", "click", () => {
   renderApplicationEditor();
 });
 
-bind("#addReviewerRole", "click", event => { event.preventDefault(); event.stopPropagation(); const menu = $("#reviewerRoleMenu"); if (menu) menu.style.display = menu.style.display === "block" ? "none" : "block"; });
+bind("#addReviewerRole", "click", event => { event.preventDefault(); event.stopPropagation(); const menu = $("#reviewerRoleMenu"); if (menu) menu.classList.toggle("open"); });
 
 bind("#reviewerRoleMenu", "click", event => { event.preventDefault(); event.stopPropagation(); const option = event.target.closest("[data-role-id]"); if (!option) return; const roleId = option.dataset.roleId; const type = selectedType(); if (!type) return; const idx = type.reviewerRoleIds.indexOf(roleId); if (idx >= 0) { type.reviewerRoleIds.splice(idx, 1); option.classList.remove("selected"); } else { type.reviewerRoleIds.push(roleId); option.classList.add("selected"); } renderReviewerTags(); });
 
-document.addEventListener("click", event => { const removeBtn = event.target.closest(".reviewer-tag-remove"); if (removeBtn) { event.stopPropagation(); const roleId = removeBtn.dataset.roleId; const type = selectedType(); if (!type) return; type.reviewerRoleIds = type.reviewerRoleIds.filter(id => id !== roleId); renderReviewerTags(); if ($("#reviewerRoleMenu")) $("#reviewerRoleMenu").style.display = "none"; return; } const menu = $("#reviewerRoleMenu"); if (menu) menu.style.display = "none"; });
+document.addEventListener("click", event => { const removeBtn = event.target.closest(".reviewer-tag-remove"); if (removeBtn) { event.stopPropagation(); const roleId = removeBtn.dataset.roleId; const type = selectedType(); if (!type) return; type.reviewerRoleIds = type.reviewerRoleIds.filter(id => id !== roleId); renderReviewerTags(); if ($("#reviewerRoleMenu")) $("#reviewerRoleMenu").classList.remove("open"); return; } const menu = $("#reviewerRoleMenu"); if (menu) menu.classList.remove("open"); });
 
 bind("#selectedApplicationQuestions", "click", event => {
   const button = event.target.closest(".remove-question");
