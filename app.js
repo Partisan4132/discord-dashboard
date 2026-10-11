@@ -111,12 +111,12 @@ function message(element, text, type = "") {
 }
 
 function updateConnection(connected, user = state.user) {
-  if ($("#connectionText")) $("#connectionText").textContent = connected ? "Connected" : "Not connected";
+  if$("#connectionText")) $("#connectionText").textContent = connected ? "Connected" : "Not connected";
   if ($(".connection-dot")) $(".connection-dot").style.background = connected ? "#58d893" : "#f0a84b";
-  if ($("#loginButton")) $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
+  if $("#loginButton")) $("#loginButton").textContent = connected ? "Log out" : "Log in with Discord";
   if (user) {
-    if ($("#serverName")) $("#serverName").textContent = user.guildName || "Connected server";
-    if ($("#sidebarServerName")) $("#sidebarServerName").textContent = user.guildName || "Connected server";
+    if $("#serverName")) $("#serverName").textContent = user.guildName || "Connected server";
+    if $("#sidebarServerName")) $("#sidebarServerName").textContent = user.guildName || "Connected server";
   }
 }
 
@@ -238,8 +238,8 @@ async function switchServer(guildId) {
   }
   state.guildId = guildId;
   localStorage.setItem("dashboard_guild_id", guildId);
-  if ($("#sidebarServerName")) $("#sidebarServerName").textContent = server.name;
-  if ($("#serverName")) $("#serverName").textContent = server.name;
+  if $("#sidebarServerName")) $("#sidebarServerName").textContent = server.name;
+  if $("#serverName")) $("#serverName").textContent = server.name;
   toggleServerMenu(false);
   await refreshDashboard();
 }
@@ -264,12 +264,12 @@ function showSection(section) {
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.section === section));
   $$(".page-section").forEach(item => item.classList.toggle("active-section", item.id === section));
   const titles = { overview: "Overview", applications: "Applications", panels: "Panels", pending: "Pending applications", welcome: "Welcome", settings: "Settings" };
-  if ($("#pageTitle")) $("#pageTitle").textContent = titles[section] || "Dashboard";
+  if $("#pageTitle")) $("#pageTitle").textContent = titles[section] || "Dashboard";
   if (state.user) loadSection(section).catch(showAuthError);
 }
 
 function renderActivity(items = []) {
-  if ($("#activityCount")) $("#activityCount").textContent = items.length;
+  if $("#activityCount")) $("#activityCount").textContent = items.length;
   if (!$("#activityFeed")) return;
   $("#activityFeed").innerHTML = items.length
     ? items.slice(0, 12).map(item => `<div class="activity-row"><div><strong>${escapeHtml(item.action || item.type || "Activity")}</strong><small>${escapeHtml(item.target || item.username || "Server event")}</small></div><small>${formatDate(item.at || item.createdAt)}</small></div>`).join("")
@@ -303,7 +303,7 @@ function selectedType() { return (state.settings?.applicationTypes || []).find(t
 
 function renderApplicationList() {
   const types = state.settings?.applicationTypes || [];
-  if ($("#applicationTypeCount")) $("#applicationTypeCount").textContent = types.length;
+  if $("#applicationTypeCount")) $("#applicationTypeCount").textContent = types.length;
   if (!$("#applicationTypeList")) return;
   $("#applicationTypeList").innerHTML = types.length
     ? types.map(type => `<button type="button" class="resource-item ${type.id === state.selectedTypeId ? "selected" : ""}" data-type-id="${escapeHtml(type.id)}"><span class="resource-icon">${escapeHtml(type.emoji || "▤")}</span><span><strong>${escapeHtml(type.name)}</strong><small>${type.enabled !== false ? "Enabled" : "Disabled"} · ${(type.questions || []).length} questions</small></span></button>`).join("")
@@ -332,11 +332,11 @@ function renderApplicationEditor() {
   set("selectedApplicationCompletionMessage", type.completionMessage);
   set("selectedApplicationAcceptedMessage", type.acceptedMessage);
   set("selectedApplicationDeniedMessage", type.deniedMessage);
-  if ($("#selectedApplicationReviewerRoles")) { renderReviewerTags(); if ($("#reviewerRoleMenu")) { $("#reviewerRoleMenu").innerHTML = (state.channels.roles || []).map(role => `<button type="button" class="dropdown-option ${(type.reviewerRoleIds || []).includes(role.id) ? "selected" : ""}" data-role-id="${escapeHtml(role.id)}">${escapeHtml(role.name)}</button>`).join("") || '<div class="empty-state">No roles available.</div>'; } }
-  if ($("#selectedApplicationAcceptedRole")) { $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role"); $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || ""; }
-  if ($("#selectedApplicationReviewChannel")) { $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel"); $("#selectedApplicationReviewChannel").value = type.reviewChannelId || ""; }
-  if ($("#selectedApplicationEnabled")) $("#selectedApplicationEnabled").checked = type.enabled !== false;
-  if ($("#selectedApplicationQuestions")) $("#selectedApplicationQuestions").innerHTML = (type.questions || []).map((question, index) => `<div class="question-row" data-question-index="${index}"><label><span class="field-label">Question ${index + 1}</span><textarea data-q-field="label">${escapeHtml(question.label)}</textarea></label><label><span class="field-label">Max characters</span><input data-q-field="maxLength" type="number" value="${Number(question.maxLength || 1200)}" /></label><label class="check"><input data-q-field="required" type="checkbox" ${question.required !== false ? "checked" : ""} /> Required <button type="button" class="danger remove-question">Remove</button></label></div>`).join("") || '<div class="empty-state">No questions yet.</div>';
+  if $("#selectedApplicationReviewerRoles")) { renderReviewerTags(); if $("#reviewerRoleMenu")) { $("#reviewerRoleMenu").innerHTML = (state.channels.roles || []).map(role => `<button type="button" class="dropdown-option ${(type.reviewerRoleIds || []).includes(role.id) ? "selected" : ""}" data-role-id="${escapeHtml(role.id)}">${escapeHtml(role.name)}</button>`).join("") || '<div class="empty-state">No roles available.</div>'; } }
+  if $("#selectedApplicationAcceptedRole")) { $("#selectedApplicationAcceptedRole").innerHTML = roleOptions(type.approvalRoleId, "No accepted role"); $("#selectedApplicationAcceptedRole").value = type.approvalRoleId || ""; }
+  if $("#selectedApplicationReviewChannel")) { $("#selectedApplicationReviewChannel").innerHTML = channelOptions(type.reviewChannelId, "Use panel review channel"); $("#selectedApplicationReviewChannel").value = type.reviewChannelId || ""; }
+  if $("#selectedApplicationEnabled")) $("#selectedApplicationEnabled").checked = type.enabled !== false;
+  if $("#selectedApplicationQuestions")) $("#selectedApplicationQuestions").innerHTML = (type.questions || []).map((question, index) => `<div class="question-row" data-question-index="${index}"><label><span class="field-label">Question ${index + 1}</span><textarea data-q-field="label">${escapeHtml(question.label)}</textarea></label><label><span class="field-label">Max characters</span><input data-q-field="maxLength" type="number" value="${Number(question.maxLength) || 1200}" /></label><label class="check"><input data-q-field="required" type="checkbox" ${question.required !== false ? "checked" : ""} /> Required <button type="button" class="danger remove-question">Remove</button></label></div>`).join("") || '<div class="empty-state">No questions yet.</div>';
 }
 
 function saveEditorToState() {
@@ -351,7 +351,7 @@ function saveEditorToState() {
   type.completionMessage = value("selectedApplicationCompletionMessage");
   type.acceptedMessage = value("selectedApplicationAcceptedMessage");
   type.deniedMessage = value("selectedApplicationDeniedMessage");
-  if ($("#selectedApplicationQuestions")) type.questions = $$(".question-row", $("#selectedApplicationQuestions")).map((row, index) => ({ id: type.questions?.[index]?.id || crypto.randomUUID(), label: row.querySelector('[data-q-field="label"]')?.value || "Question", maxLength: Number(row.querySelector('[data-q-field="maxLength"]')?.value || 1200), required: row.querySelector('[data-q-field="required"]')?.checked !== false }));
+  if $("#selectedApplicationQuestions")) type.questions = $$(".question-row", $("#selectedApplicationQuestions")).map((row, index) => ({ id: type.questions?.[index]?.id || crypto.randomUUID(), label: row.querySelector('[data-q-field="label"]')?.value || "Question", maxLength: Number(row.querySelector('[data-q-field="maxLength"]')?.value || 1200), required: row.querySelector('[data-q-field="required"]')?.checked !== false }));
 }
 
 function fillPanelFields() {
@@ -360,8 +360,8 @@ function fillPanelFields() {
   const fields = { applicationPanelChannelId: channelOptions(settings.applicationPanelChannelId, "Choose panel channel"), applicationPendingChannelId: channelOptions(settings.applicationPendingChannelId, "Choose pending channel"), applicationReviewChannelId: channelOptions(settings.applicationReviewChannelId, "Choose review channel"), applicationReviewedChannelId: channelOptions(settings.applicationReviewedChannelId, "No reviewed-results channel"), applicationReviewerRoleId: roleOptions(settings.applicationReviewerRoleId, "Choose reviewer role") };
   Object.entries(fields).forEach(([id, html]) => { if ($(`#${id}`)) { $(`#${id}`).innerHTML = html; $(`#${id}`).value = settings[id] || ""; } });
   ["applicationPanelTitle", "applicationPanelDescription", "applicationPanelColor", "applicationPanelImageUrl", "applicationPanelPlaceholder", "applicationPanelInteraction"].forEach(id => { if ($(`#${id}`)) $(`#${id}`).value = settings[id] || ""; });
-  if ($("#applicationPanelDeleteOld")) $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
-  if ($("#panelApplicationChecklist")) $("#panelApplicationChecklist").innerHTML = (settings.applicationTypes || []).map(type => `<label class="panel-check"><input type="checkbox" data-panel-type="${escapeHtml(type.id)}" ${type.enabled !== false ? "checked" : ""} /><span><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.description || "Application form")}</small></span></label>`).join("") || '<div class="empty-state">Create an application first.</div>';
+  if $("#applicationPanelDeleteOld")) $("#applicationPanelDeleteOld").checked = settings.applicationPanelDeleteOld !== false;
+  if $("#panelApplicationChecklist")) $("#panelApplicationChecklist").innerHTML = (settings.applicationTypes || []).map(type => `<label class="panel-check"><input type="checkbox" data-panel-type="${escapeHtml(type.id)}" ${type.enabled !== false ? "checked" : ""} /><span><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.description || "Application form")}</small></span></label>`).join("") || '<div class="empty-state">Create an application first.</div>';
 }
 
 function collectSettings() {
@@ -382,9 +382,9 @@ function renderExtraPanelForm() {
   $("#extraPanelForm").classList.remove("hidden");
   const set = (id, value) => { if ($(`#${id}`)) $(`#${id}`).value = value ?? ""; };
   set("extraPanelName", panel.name); set("extraPanelTitle", panel.title); set("extraPanelDescription", panel.description); set("extraPanelColor", panel.color); set("extraPanelImageUrl", panel.imageUrl); set("extraPanelPlaceholder", panel.placeholder);
-  if ($("#extraPanelChannelId")) { $("#extraPanelChannelId").innerHTML = channelOptions(panel.channelId, "Choose panel channel"); $("#extraPanelChannelId").value = panel.channelId || ""; }
-  if ($("#extraPanelDeleteOld")) $("#extraPanelDeleteOld").checked = panel.deleteOld !== false;
-  if ($("#extraPanelTypes")) $("#extraPanelTypes").innerHTML = (state.settings?.applicationTypes || []).map(type => `<label class="panel-check"><input type="checkbox" data-extra-type-id="${escapeHtml(type.id)}" ${panel.applicationTypeIds.includes(type.id) ? "checked" : ""} /><span><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.description || "Application form")}</small></span></label>`).join("") || '<div class="empty-state">Create an application first.</div>';
+  if $("#extraPanelChannelId")) { $("#extraPanelChannelId").innerHTML = channelOptions(panel.channelId, "Choose panel channel"); $("#extraPanelChannelId").value = panel.channelId || ""; }
+  if $("#extraPanelDeleteOld")) $("#extraPanelDeleteOld").checked = panel.deleteOld !== false;
+  if $("#extraPanelTypes")) $("#extraPanelTypes").innerHTML = (state.settings?.applicationTypes || []).map(type => `<label class="panel-check"><input type="checkbox" data-extra-type-id="${escapeHtml(type.id)}" ${(panel.applicationTypeIds || []).includes(type.id) ? "checked" : ""} /><span><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.description || "Application form")}</small></span></label>`).join("") || '<div class="empty-state">Create an application first.</div>';
 }
 
 function readExtraPanelForm() {
@@ -394,10 +394,10 @@ function readExtraPanelForm() {
 function renderAccess() {
   const access = state.access;
   if (!access) return;
-  const isOwner = state.userId === "1499890551997071431";
-  if ($("#settingsRoleSummary")) $("#settingsRoleSummary").textContent = access.role === "owner" ? "Owner access" : "Administrator access";
+  const isOwner = access.role === "owner";
+  if $("#settingsRoleSummary")) $("#settingsRoleSummary").textContent = access.role === "owner" ? "Owner access" : "Administrator access";
   if (!isOwner) { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); $("#serverAccessCard")?.classList.add("hidden"); return; }
-  if ($("#settingsAdminsList")) $("#settingsAdminsList").innerHTML = access.members?.length ? access.members.map(member => `<div class="admin-row"><div><strong>${escapeHtml(member.username)}</strong><small>${escapeHtml(member.role)} · ${escapeHtml(member.userId)}</small></div><button class="danger remove-admin" type="button" data-admin-id="${escapeHtml(member.id)}">Remove</button></div>`).join("") : '<div class="empty-state">No manually added dashboard members.</div>';
+  if $("#settingsAdminsList")) $("#settingsAdminsList").innerHTML = access.members?.length ? access.members.map(member => `<div class="admin-row"><div><strong>${escapeHtml(member.username)}</strong><small>${escapeHtml(member.role)} · ${escapeHtml(member.userId)}</small></div><button class="danger remove-admin" type="button" data-admin-id="${escapeHtml(member.id)}">Remove</button></div>`).join("") : '<div class="empty-state">No manually added dashboard members.</div>';
   const permissions = access.permissions || {};
   $$('[data-permission-key]').forEach(input => { input.checked = permissions[input.dataset.permissionKey] === true; input.disabled = access.role !== "owner"; });
   if (access.role !== "owner") { $("#adminManagementCard")?.classList.add("hidden"); $("#permissionsManagementCard")?.classList.add("hidden"); $("#serverAccessCard")?.classList.add("hidden"); }
@@ -424,7 +424,7 @@ function loadServerAccess() {
 function renderServerAccess() {
   const list = $("#serverAccessList");
   if (!list) return;
-  const isOwner = state.userId === "1499890551997071431";
+  const isOwner = state.access?.role === "owner";
   const servers = state.servers.filter(s => isOwner || s.accessRole === "owner");
   list.innerHTML = servers.length ? servers.map(s => {
     const access = state.serverAccess[s.id] || { adminCanView: true, adminCanEdit: true };
@@ -451,23 +451,23 @@ function saveServerAccess() {
     state.serverAccess[item.serverId] = current;
   }
   localStorage.setItem("dashboard_server_access", JSON.stringify(state.serverAccess));
-  message($("#settingsMessage"), "Server access saved.", "success");
+  message $("#settingsMessage"), "Server access saved.", "success";
 }
 
 function resetServerAccess() {
   state.serverAccess = {};
   localStorage.removeItem("dashboard_server_access");
   loadServerAccess();
-  message($("#settingsMessage"), "Server access reset to defaults.", "success");
+  message $("#settingsMessage"), "Server access reset to defaults.", "success";
 }
 
 async function loadSection(section) {
   if (section === "overview") {
     const [status, activity, applications] = await Promise.all([api("/api/status"), api("/api/activity"), api("/api/applications?status=pending")]);
-    if ($("#botStatus")) $("#botStatus").textContent = status.online ? "Online" : "Offline";
-    if ($("#botStatusDetail")) $("#botStatusDetail").textContent = `${status.guildName} · ${status.memberCount} members`;
-    if ($("#memberCount")) $("#memberCount").textContent = status.memberCount;
-    if ($("#applicationCount")) $("#applicationCount").textContent = applications.length;
+    if $("#botStatus")) $("#botStatus").textContent = status.online ? "Online" : "Offline";
+    if $("#botStatusDetail")) $("#botStatusDetail").textContent = `${status.guildName || "Unknown server"} · ${status.memberCount ?? 0} members`;
+    if $("#memberCount")) $("#memberCount").textContent = status.memberCount;
+    if $("#applicationCount")) $("#applicationCount").textContent = applications.length;
     renderActivity(activity);
   }
   if (section === "pending") renderApplications(await api("/api/applications?status=pending"));
@@ -479,14 +479,14 @@ async function loadSection(section) {
     if (section === "panels") {
       fillPanelFields();
       const result = await api("/api/panels");
-      state.extraPanels = result.panels || [];
+      state.extraPanels = result?.panels || [];
       state.selectedExtraPanelId ||= state.extraPanels[0]?.id || null;
       renderExtraPanels();
       renderExtraPanelForm();
     }
     if (section === "welcome") {
-      if ($("#welcomeChannelId")) { $("#welcomeChannelId").innerHTML = channelOptions(state.settings.welcomeChannelId, "Choose welcome channel"); $("#welcomeChannelId").value = state.settings.welcomeChannelId || ""; }
-      if ($("#welcomeImageUrl")) $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
+      if $("#welcomeChannelId")) { $("#welcomeChannelId").innerHTML = channelOptions(state.settings.welcomeChannelId, "Choose welcome channel"); $("#welcomeChannelId").value = state.settings.welcomeChannelId || ""; }
+      if $("#welcomeImageUrl")) $("#welcomeImageUrl").value = state.settings.welcomeImageUrl || "";
     }
   }
   if (section === "settings") { await loadAccess(); await loadServerAccess(); }
@@ -550,8 +550,8 @@ bind("#serverPickerMenu", "click", event => {
       if (replacement) {
         state.guildId = replacement.id;
         localStorage.setItem("dashboard_guild_id", replacement.id);
-        if ($("#sidebarServerName")) $("#sidebarServerName").textContent = replacement.name;
-        if ($("#serverName")) $("#serverName").textContent = replacement.name;
+        if $("#sidebarServerName")) $("#sidebarServerName").textContent = replacement.name;
+        if $("#serverName")) $("#serverName").textContent = replacement.name;
       }
     }
     localStorage.setItem("dashboard_hidden_guilds", JSON.stringify(state.hiddenGuildIds));
@@ -623,7 +623,7 @@ bind("#addReviewerRole", "click", event => { event.preventDefault(); event.stopP
 
 bind("#reviewerRoleMenu", "click", event => { event.preventDefault(); event.stopPropagation(); const option = event.target.closest("[data-role-id]"); if (!option) return; const roleId = option.dataset.roleId; const type = selectedType(); if (!type) return; const idx = type.reviewerRoleIds.indexOf(roleId); if (idx >= 0) { type.reviewerRoleIds.splice(idx, 1); option.classList.remove("selected"); } else { type.reviewerRoleIds.push(roleId); option.classList.add("selected"); } renderReviewerTags(); });
 
-document.addEventListener("click", event => { const removeBtn = event.target.closest(".reviewer-tag-remove"); if (removeBtn) { event.stopPropagation(); const roleId = removeBtn.dataset.roleId; const type = selectedType(); if (!type) return; type.reviewerRoleIds = type.reviewerRoleIds.filter(id => id !== roleId); renderReviewerTags(); if ($("#reviewerRoleMenu")) $("#reviewerRoleMenu").classList.remove("open"); return; } const menu = $("#reviewerRoleMenu"); if (menu) menu.classList.remove("open"); });
+document.addEventListener("click", event => { const removeBtn = event.target.closest(".reviewer-tag-remove"); if (removeBtn) { event.stopPropagation(); const roleId = removeBtn.dataset.roleId; const type = selectedType(); if (!type) return; type.reviewerRoleIds = type.reviewerRoleIds.filter(id => id !== roleId); renderReviewerTags(); if $("#reviewerRoleMenu")) $("#reviewerRoleMenu").classList.remove("open"); return; } const menu = $("#reviewerRoleMenu"); if (menu) menu.classList.remove("open"); });
 
 bind("#selectedApplicationQuestions", "click", event => {
   const button = event.target.closest(".remove-question");
@@ -639,8 +639,8 @@ bind("#saveApplications", "click", async () => {
   try {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...collectSettings(), applicationTypes: state.settings.applicationTypes }) });
     renderApplicationEditor();
-    message($("#applicationMessage"), "Application saved.", "success");
-  } catch (error) { message($("#applicationMessage"), error.message, "error"); }
+    message $("#applicationMessage"), "Application saved.", "success";
+  } catch (error) { message $("#applicationMessage"), error.message, "error"; }
 });
 
 bind("#deleteApplication", "click", async () => {
@@ -652,31 +652,31 @@ bind("#deleteApplication", "click", async () => {
     state.selectedTypeId = state.settings.applicationTypes[0]?.id || null;
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...collectSettings(), applicationTypes: state.settings.applicationTypes }) });
     renderApplicationEditor();
-    message($("#applicationMessage"), "Application deleted.", "success");
-  } catch (error) { message($("#applicationMessage"), error.message, "error"); }
+    message $("#applicationMessage"), "Application deleted.", "success";
+  } catch (error) { message $("#applicationMessage"), error.message, "error"; }
 });
 
 bind("#saveSettings", "click", async () => {
   try {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) });
     fillPanelFields();
-    message($("#builderMessage"), "Panel saved.", "success");
-  } catch (error) { message($("#builderMessage"), error.message, "error"); }
+    message $("#builderMessage"), "Panel saved.", "success";
+  } catch (error) { message $("#builderMessage"), error.message, "error"; }
 });
 
 bind("#publishPanel", "click", async () => {
   try {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(collectSettings()) });
     await api("/api/panel/publish", { method: "POST" });
-    message($("#builderMessage"), "Panel sent to Discord.", "success");
-  } catch (error) { message($("#builderMessage"), error.message, "error"); }
+    message $("#builderMessage"), "Panel sent to Discord.", "success";
+  } catch (error) { message $("#builderMessage"), error.message, "error"; }
 });
 
 bind("#saveWelcome", "click", async () => {
   try {
     state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify({ ...state.settings, welcomeChannelId: $("#welcomeChannelId")?.value || "", welcomeImageUrl: $("#welcomeImageUrl")?.value.trim() || "" }) });
-    message($("#welcomeMessage"), "Welcome settings saved.", "success");
-  } catch (error) { message($("#welcomeMessage"), error.message, "error"); }
+    message $("#welcomeMessage"), "Welcome settings saved.", "success";
+  } catch (error) { message $("#welcomeMessage"), error.message, "error"; }
 });
 
 bind("#applicationsList", "click", async event => {
@@ -691,11 +691,11 @@ bind("#applicationsList", "click", async event => {
 bind("#createExtraPanel", "click", async () => {
   try {
     const result = await api("/api/panels", { method: "POST", body: JSON.stringify({ name: "New panel", title: "Applications", color: "#2bd9fe", placeholder: "Choose an application type", deleteOld: true, applicationTypeIds: (state.settings?.applicationTypes || []).filter(type => type.enabled !== false).map(type => type.id) }) });
-    state.extraPanels = result.panels || [];
+    state.extraPanels = result?.panels || [];
     state.selectedExtraPanelId = result.panel.id;
     renderExtraPanels();
     renderExtraPanelForm();
-  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
+  } catch (error) { message $("#extraPanelMessage"), error.message, "error"; }
 });
 
 bind("#extraPanelsList", "click", event => {
@@ -710,11 +710,11 @@ bind("#saveExtraPanel", "click", async () => {
   if (!state.selectedExtraPanelId) return;
   try {
     const result = await api(`/api/panels/${state.selectedExtraPanelId}`, { method: "PUT", body: JSON.stringify(readExtraPanelForm()) });
-    state.extraPanels = result.panels || [];
+    state.extraPanels = result?.panels || [];
     renderExtraPanels();
     renderExtraPanelForm();
-    message($("#extraPanelMessage"), "Panel saved.", "success");
-  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
+    message $("#extraPanelMessage"), "Panel saved.", "success";
+  } catch (error) { message $("#extraPanelMessage"), error.message, "error"; }
 });
 
 bind("#publishExtraPanel", "click", async () => {
@@ -722,32 +722,32 @@ bind("#publishExtraPanel", "click", async () => {
   try {
     await api(`/api/panels/${state.selectedExtraPanelId}`, { method: "PUT", body: JSON.stringify(readExtraPanelForm()) });
     const result = await api(`/api/panels/${state.selectedExtraPanelId}/publish`, { method: "POST" });
-    state.extraPanels = result.panels || [];
+    state.extraPanels = result?.panels || [];
     renderExtraPanels();
     renderExtraPanelForm();
-    message($("#extraPanelMessage"), "Panel published to Discord.", "success");
-  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
+    message $("#extraPanelMessage"), "Panel published to Discord.", "success";
+  } catch (error) { message $("#extraPanelMessage"), error.message, "error"; }
 });
 
 bind("#deleteExtraPanel", "click", async () => {
   if (!state.selectedExtraPanelId || !confirm("Delete this additional panel?")) return;
   try {
     const result = await api(`/api/panels/${state.selectedExtraPanelId}`, { method: "DELETE" });
-    state.extraPanels = result.panels || [];
+    state.extraPanels = result?.panels || [];
     state.selectedExtraPanelId = state.extraPanels[0]?.id || null;
     renderExtraPanels();
     renderExtraPanelForm();
-  } catch (error) { message($("#extraPanelMessage"), error.message, "error"); }
+  } catch (error) { message $("#extraPanelMessage"), error.message, "error"; }
 });
 
 bind("#addSettingsAdmin", "click", async () => {
   try {
     const result = await api("/api/access/members", { method: "POST", body: JSON.stringify({ username: $("#settingsAdminUsername")?.value.trim() || "", role: $("#settingsAdminRole")?.value || "admin" }) });
     state.access.members = result.members;
-    if ($("#settingsAdminUsername")) $("#settingsAdminUsername").value = "";
+    if $("#settingsAdminUsername")) $("#settingsAdminUsername").value = "";
     renderAccess();
-    message($("#settingsMessage"), "Dashboard member added.", "success");
-  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
+    message $("#settingsMessage"), "Dashboard member added.", "success";
+  } catch (error) { message $("#settingsMessage"), error.message, "error"; }
 });
 
 bind("#settingsAdminsList", "click", async event => {
@@ -757,8 +757,8 @@ bind("#settingsAdminsList", "click", async event => {
     const result = await api(`/api/access/members/${button.dataset.adminId}`, { method: "DELETE" });
     state.access.members = result.members;
     renderAccess();
-    message($("#settingsMessage"), "Dashboard member removed.", "success");
-  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
+    message $("#settingsMessage"), "Dashboard member removed.", "success";
+  } catch (error) { message $("#settingsMessage"), error.message, "error"; }
 });
 
 bind("#saveAdminPermissions", "click", async () => {
@@ -767,8 +767,8 @@ bind("#saveAdminPermissions", "click", async () => {
     const result = await api("/api/access/permissions", { method: "PUT", body: JSON.stringify({ permissions }) });
     state.access.permissions = result.permissions;
     renderAccess();
-    message($("#settingsMessage"), "Permissions saved.", "success");
-  } catch (error) { message($("#settingsMessage"), error.message, "error"); }
+    message $("#settingsMessage"), "Permissions saved.", "success";
+  } catch (error) { message $("#settingsMessage"), error.message, "error"; }
 });
 
 bind("#saveServerAccess", "click", async () => {
